@@ -1,0 +1,15 @@
+[Unit]
+Description=Flight Bot Telegram
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/flight_bot
+ExecStart=/opt/flight_bot/venv/bin/python -m bot.main
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
