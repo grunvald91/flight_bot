@@ -22,7 +22,7 @@ jobs:
           host: 188.120.254.223
           username: root
           password: ${{ secrets.FLIGHT_BOT_SSH_PASSWORD }}
-          source: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/services/scheduler.py,bot/services/channel_publisher.py"
+          source: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/handlers/common.py,bot/handlers/travel.py,bot/keyboards/common_kb.py,bot/states/search.py,bot/services/scheduler.py,bot/services/channel_publisher.py,bot/services/tutu_mcp.py"
           target: "/opt/flight_bot"
           overwrite: true
 
