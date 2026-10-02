@@ -1,6 +1,8 @@
 import html
+import json
 import logging
 from datetime import datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
@@ -10,10 +12,91 @@ from bot.services.international_discovery import discover_international_offers
 
 logger = logging.getLogger(__name__)
 
+ROOT_DIR = Path(__file__).resolve().parents[2]
+STATE_PATH = ROOT_DIR / "private_cache" / "channel_publication.json"
+
 CHANNELS = (
     ("moscow", "MOW", "Москвы", MOSCOW_CHANNEL_ID),
     ("sochi", "AER", "Сочи", SOCHI_CHANNEL_ID),
 )
+
+
+def _load_state() -> dict:
+    try:
+        if not STATE_PATH.exists():
+            return {"channels": {}}
+        payload = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return {"channels": {}}
+        payload.setdefault("channels", {})
+        return payload
+    except Exception:
+        logger.exception("Could not read channel publication state")
+        return {"channels": {}}
+
+
+def _save_state(state: dict) -> None:
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = STATE_PATH.with_suffix(".tmp")
+    tmp.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    tmp.replace(STATE_PATH)
+
+
+def bind_channel(
+    key: str,
+    *,
+    chat_id: int,
+    title: str | None = None,
+    username: str | None = None,
+) -> dict:
+    if key not in {"moscow", "sochi"}:
+        raise ValueError(f"Unknown channel key: {key}")
+
+    state = _load_state()
+    channels = state.setdefault("channels", {})
+    previous = channels.get(key) if isinstance(channels.get(key), dict) else {}
+    channels[key] = {
+        "chat_id": int(chat_id),
+        "title": title or "",
+        "username": username or "",
+        "last_published_date": previous.get("last_published_date"),
+    }
+    _save_state(state)
+    return dict(channels[key])
+
+
+def get_channel_bindings() -> dict[str, dict | None]:
+    channels = _load_state().get("channels") or {}
+    return {
+        key: dict(channels[key]) if isinstance(channels.get(key), dict) else None
+        for key in ("moscow", "sochi")
+    }
+
+
+def _resolve_chat_id(key: str, configured: str) -> int | str | None:
+    if configured:
+        return configured
+    binding = get_channel_bindings().get(key)
+    return binding.get("chat_id") if binding else None
+
+
+def _already_published(key: str, departure_date: str) -> bool:
+    binding = get_channel_bindings().get(key)
+    return bool(binding and binding.get("last_published_date") == departure_date)
+
+
+def _mark_published(key: str, departure_date: str) -> None:
+    state = _load_state()
+    channels = state.setdefault("channels", {})
+    binding = channels.get(key)
+    if not isinstance(binding, dict):
+        binding = {}
+        channels[key] = binding
+    binding["last_published_date"] = departure_date
+    _save_state(state)
 
 
 def _flag(country_code: str | None) -> str:
@@ -80,9 +163,14 @@ def format_channel_post(origin_label: str, departure_date: str, offers: list[dic
             details.insert(0, depart_time)
 
         search_url = offer.get("search_results_url") or (offer.get("checkout_ref") or {}).get("search_results_url")
-        destination = f"{_flag(country_code)} <b>{html.escape(country)} — {html.escape(city)}</b>"
+        destination_text = f"{_flag(country_code)} {country} — {city}"
         if search_url:
-            destination = f'<a href="{html.escape(str(search_url), quote=True)}">{destination}</a>'
+            destination = (
+                f'<a href="{html.escape(str(search_url), quote=True)}">'
+                f'<b>{html.escape(destination_text)}</b></a>'
+            )
+        else:
+            destination = f"<b>{html.escape(destination_text)}</b>"
 
         lines.append(f"{index}. {destination} — <b>{price_text}</b>")
         lines.append(f"   {' · '.join(details)}")
@@ -136,14 +224,19 @@ async def publish_channel(
     return min(10, len(offers))
 
 
-async def publish_tomorrow_channels(bot: Bot) -> dict[str, int]:
+async def publish_tomorrow_channels(bot: Bot, *, force: bool = False) -> dict[str, int]:
     now = datetime.now(ZoneInfo(TIMEZONE))
     departure_date = (now.date() + timedelta(days=1)).isoformat()
     result: dict[str, int] = {}
 
-    for key, origin, origin_label, chat_id in CHANNELS:
+    for key, origin, origin_label, configured_chat_id in CHANNELS:
+        chat_id = _resolve_chat_id(key, configured_chat_id)
         if not chat_id:
             logger.warning("%s channel is not configured; skipping", key)
+            result[key] = 0
+            continue
+        if not force and _already_published(key, departure_date):
+            logger.info("%s channel already published for %s", key, departure_date)
             result[key] = 0
             continue
         try:
@@ -154,6 +247,8 @@ async def publish_tomorrow_channels(bot: Bot) -> dict[str, int]:
                 chat_id=chat_id,
                 departure_date=departure_date,
             )
+            if result[key] > 0:
+                _mark_published(key, departure_date)
         except Exception:
             logger.exception("Daily channel publication failed for %s", key)
             result[key] = 0
