@@ -19,7 +19,9 @@ def main() -> int:
         headers={"User-Agent": "A_TicketBot/1.0 (+GitHub Actions snapshot)"},
     )
     with urllib.request.urlopen(request, timeout=30) as response:
+        content_type = response.headers.get("Content-Type", "")
         raw = response.read()
+    print(f"KDMID response: content_type={content_type!r}, bytes={len(raw)}")
 
     text = None
     for encoding in ("utf-8-sig", "cp1251"):
@@ -32,7 +34,11 @@ def main() -> int:
             text = candidate
             break
     if text is None:
-        raise RuntimeError("Could not decode KDMID CSV as UTF-8 or Windows-1251")
+        prefix = raw[:240]
+        raise RuntimeError(
+            "Could not decode KDMID CSV as UTF-8 or Windows-1251; "
+            f"prefix={prefix!r}"
+        )
     sample = text[:8192]
     try:
         delimiter = csv.Sniffer().sniff(sample, delimiters=";,\t").delimiter
