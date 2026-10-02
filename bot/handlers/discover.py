@@ -328,6 +328,16 @@ def _discovery_keyboard(
     search_url = offer.get("search_results_url") or checkout_ref.get("search_results_url")
     if search_url:
         rows.append([InlineKeyboardButton(text="Все рейсы в этот город", url=search_url)])
+
+    country_code = str((offer.get("_discovery") or {}).get("country_code") or "").upper()
+    if len(country_code) == 2:
+        rows.append([
+            InlineKeyboardButton(
+                text="ℹ️ Въезд для граждан РФ",
+                callback_data=f"entry:{country_code}",
+            )
+        ])
+
     rows.append([
         InlineKeyboardButton(text="Новый поиск", callback_data="menu:discover")
     ])
