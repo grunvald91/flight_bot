@@ -23,6 +23,12 @@ else:
 
 TIMEZONE = os.getenv("TIMEZONE", "Europe/Moscow")
 CACHE_TTL_MINUTES = int(os.getenv("CACHE_TTL_MINUTES", "5"))
+
+# Daily Telegram channel publication (tomorrow's cheapest international tickets).
+MOSCOW_CHANNEL_ID = os.getenv("MOSCOW_CHANNEL_ID", "").strip()
+SOCHI_CHANNEL_ID = os.getenv("SOCHI_CHANNEL_ID", "").strip()
+DAILY_CHANNEL_HOUR = int(os.getenv("DAILY_CHANNEL_HOUR", "8"))
+DAILY_CHANNEL_MINUTE = int(os.getenv("DAILY_CHANNEL_MINUTE", "0"))
 PASSENGER_WEBAPP_URL = os.getenv(
     "PASSENGER_WEBAPP_URL",
     "https://flight-profile.bandbook.site",
