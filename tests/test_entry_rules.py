@@ -61,3 +61,42 @@ def test_deep_discovery_keyboard_has_entry_button():
     buttons = [button for row in keyboard.inline_keyboard for button in row]
 
     assert any(button.callback_data == "entry:TR" for button in buttons)
+
+
+def test_fast_browse_list_shows_entry_button_for_each_destination():
+    payload = {
+        "options": [
+            {
+                "origin": "MOW",
+                "destination": "IST",
+                "city": "Стамбул",
+                "country": "Турция",
+                "country_code": "TR",
+                "price": 9000,
+                "transfers": 0,
+            },
+            {
+                "origin": "MOW",
+                "destination": "EVN",
+                "city": "Ереван",
+                "country": "Армения",
+                "country_code": "AM",
+                "price": 10000,
+                "transfers": 0,
+            },
+        ],
+        "meta": {"departure_date": "2026-10-03"},
+    }
+
+    keyboard = browse._page_keyboard("abc", payload, 0)
+    callbacks = [
+        button.callback_data
+        for row in keyboard.inline_keyboard
+        for button in row
+        if button.callback_data
+    ]
+
+    assert "entry:TR" in callbacks
+    assert "entry:AM" in callbacks
+    assert "brsel:abc:0" in callbacks
+    assert "brsel:abc:1" in callbacks
