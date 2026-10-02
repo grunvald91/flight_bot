@@ -1,6 +1,6 @@
 import pytest
 
-from bot.handlers import browse, discover
+from bot.handlers import browse, discover, entry
 from bot.services import entry_rules
 from bot.services.discovery_archive import DiscoveryArchive
 
@@ -183,3 +183,31 @@ def test_fast_browse_archive_keeps_entry_buttons_after_paging(tmp_path):
     ]
     assert "entry:TR" in callbacks
     assert "entry:KZ" in callbacks
+
+
+def test_entry_card_date_is_human_readable():
+    assert entry._format_checked_at("2026-10-02T15:47:18+03:00") == "02.10.2026"
+    assert entry._format_checked_at("2026-10-02") == "02.10.2026"
+
+
+def test_entry_card_simplifies_common_visa_rule():
+    lines = entry._simple_entry_lines(
+        "без визы до 60 дней (Соглашение между Правительствами от 12.05.2010)"
+    )
+    text = "\n".join(lines)
+
+    assert "Виза не нужна" in text
+    assert "до 60 дней" in text
+    assert "Соглашение" not in text
+
+
+def test_kazakhstan_card_is_short_and_practical():
+    rule = entry_rules.VERIFIED_COUNTRY_RULES["KZ"]
+    lines = entry._simple_entry_lines(rule.ordinary_passport, rule.details)
+    text = "\n".join(lines)
+
+    assert "Виза не нужна" in text
+    assert "90 дней" in text
+    assert "внутренний российский паспорт" in text
+    assert "3 рабочих дней" in text
+    assert "РВП" not in text
