@@ -30,7 +30,11 @@ def main() -> int:
         except UnicodeDecodeError:
             continue
         lowered = candidate.lower()
-        if "страна" in lowered and "общеграждан" in lowered:
+        first_line = lowered.splitlines()[0] if lowered.splitlines() else ""
+        if (
+            ("country" in first_line and "citizen" in first_line)
+            or ("страна" in lowered and "общеграждан" in lowered)
+        ):
             text = candidate
             break
     if text is None:
