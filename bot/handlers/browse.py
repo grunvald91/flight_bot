@@ -220,11 +220,22 @@ async def browse_page(callback: CallbackQuery):
 
 def _selected_keyboard(key: str, index: int, option: dict, departure_date: str) -> InlineKeyboardMarkup:
     url = aviasales_api.build_search_link(option["origin"], option["destination"], departure_date)
-    return InlineKeyboardMarkup(inline_keyboard=[
+    rows = [
         [InlineKeyboardButton(text="🟣 Туту", callback_data=f"brtutu:{key}:{index}"),
          InlineKeyboardButton(text="✈️ Aviasales ↗", url=url)],
-        [InlineKeyboardButton(text="⬅️ К списку", callback_data=f"brpage:{key}:{index // PAGE_SIZE}")],
+    ]
+    country_code = str(option.get("country_code") or "").upper()
+    if len(country_code) == 2:
+        rows.append([
+            InlineKeyboardButton(
+                text="ℹ️ Въезд для граждан РФ",
+                callback_data=f"entry:{country_code}",
+            )
+        ])
+    rows.append([
+        InlineKeyboardButton(text="⬅️ К списку", callback_data=f"brpage:{key}:{index // PAGE_SIZE}")
     ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 @router.callback_query(F.data.startswith("brsel:"))
