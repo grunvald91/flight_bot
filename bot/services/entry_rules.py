@@ -62,9 +62,40 @@ COUNTRY_ALIASES = {
 class EntryRule:
     country: str
     ordinary_passport: str
+    details: str = ""
     source_url: str = KDMID_SOURCE_URL
+    extra_source_url: str | None = None
     stale: bool = False
     updated_at: str | None = None
+
+
+VERIFIED_COUNTRY_RULES: dict[str, EntryRule] = {
+    "KZ": EntryRule(
+        country="Казахстан",
+        ordinary_passport=(
+            "Виза не нужна. Для граждан Российской Федерации разрешённое пребывание "
+            "без оформления разрешения на временное проживание — до 90 календарных дней; "
+            "для граждан государств ЕАЭС действует общий предел 90 дней в каждом "
+            "180-дневном периоде."
+        ),
+        details=(
+            "Документы: граждане РФ могут въезжать по внутреннему российскому паспорту "
+            "или загранпаспорту.\n"
+            "Уведомление: принимающая сторона (например, гостиница, хозяин жилья) должна "
+            "уведомить миграционную службу о прибытии иностранца в течение 3 рабочих дней.\n"
+            "Если планируется пребывание дольше разрешённого срока, работа, учёба или иное "
+            "долгосрочное основание, требуется оформить соответствующий статус/РВП."
+        ),
+        source_url=(
+            "https://www.gov.kz/memleket/entities/mfa/activities/34747"
+            "?lang=ru&parentId=3053"
+        ),
+        extra_source_url=(
+            "https://www.gov.kz/situations/497/1149?hl=ru-RU&lang=ru"
+        ),
+        updated_at="2026-10-02",
+    ),
+}
 
 
 _memory_rules: list[dict] | None = None
@@ -214,6 +245,11 @@ async def find_entry_rule(
     country_name: str,
     country_code: str | None = None,
 ) -> EntryRule | None:
+    code = (country_code or "").upper()
+    verified = VERIFIED_COUNTRY_RULES.get(code)
+    if verified is not None:
+        return verified
+
     rules, fetched_at, stale = await get_rules()
     candidates = _candidate_names(country_name, country_code)
     if not candidates:
