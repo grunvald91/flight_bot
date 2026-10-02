@@ -201,6 +201,7 @@ def main_menu_keyboard(user_id: int | None = None) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(text="🔍 Найти билеты", switch_inline_query_current_chat="")],
         [InlineKeyboardButton(text="🟣 Поиск на Туту", callback_data="tutu:start")],
+        [InlineKeyboardButton(text="🧭 Поездка: транспорт + отель", callback_data="travel:start")],
         [InlineKeyboardButton(text="⚡ Быстрый обзор направлений", callback_data="menu:browse")],
         [InlineKeyboardButton(text="🌍 Куда дешевле за границу", callback_data="menu:discover")],
         [InlineKeyboardButton(text="👤 Профиль пассажира", callback_data="profile:open")],
@@ -228,8 +229,8 @@ def persistent_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🔍 Найти билеты"), KeyboardButton(text="🟣 Поиск на Туту")],
-            [KeyboardButton(text="⚡ Быстрый"), KeyboardButton(text="🌍 Глубокий")],
-            [KeyboardButton(text="🏠 Меню")],
+            [KeyboardButton(text="🧭 Поездка"), KeyboardButton(text="⚡ Быстрый")],
+            [KeyboardButton(text="🌍 Глубокий"), KeyboardButton(text="🏠 Меню")],
         ],
         resize_keyboard=True,
         is_persistent=True,
