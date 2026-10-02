@@ -114,7 +114,7 @@ async def test_kazakhstan_verified_override_does_not_depend_on_remote_dataset(mo
     assert rule is not None
     assert "Виза не нужна" in rule.ordinary_passport
     assert "90" in rule.ordinary_passport
-    assert "внутреннему российскому паспорту" in rule.details
+    assert "внутренний российский паспорт" in rule.details
     assert "3 рабочих дней" in rule.details
     assert "gov.kz" in rule.source_url
 
