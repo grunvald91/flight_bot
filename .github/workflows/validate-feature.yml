@@ -21,7 +21,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          python -m pip install pytest pytest-asyncio
+          python -m pip install pytest pytest-asyncio aiosqlite
       - name: Compile
         run: python -m compileall -q bot database tests
       - name: Tests
