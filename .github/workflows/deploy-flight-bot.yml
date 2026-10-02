@@ -16,13 +16,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Refresh official KDMID entry-rules snapshot
+        run: python scripts/fetch_kdmid_entry_rules.py
+
       - name: Upload changed files
         uses: appleboy/scp-action@v1
         with:
           host: 188.120.254.223
           username: root
           password: ${{ secrets.FLIGHT_BOT_SSH_PASSWORD }}
-          source: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/handlers/common.py,bot/handlers/travel.py,bot/handlers/entry.py,bot/handlers/browse.py,bot/handlers/discover.py,bot/keyboards/common_kb.py,bot/states/search.py,bot/services/scheduler.py,bot/services/channel_publisher.py,bot/services/tutu_mcp.py,bot/services/entry_rules.py,bot/services/fast_browse.py"
+          source: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/handlers/common.py,bot/handlers/travel.py,bot/handlers/entry.py,bot/handlers/browse.py,bot/handlers/discover.py,bot/keyboards/common_kb.py,bot/states/search.py,bot/services/scheduler.py,bot/services/channel_publisher.py,bot/services/tutu_mcp.py,bot/services/entry_rules.py,bot/services/fast_browse.py,data/kdmid_entry_rules.csv"
           target: "/opt/flight_bot"
           overwrite: true
 
