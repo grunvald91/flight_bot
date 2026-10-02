@@ -21,3 +21,22 @@ class InternationalDiscoveryStates(StatesGroup):
 class FastBrowseStates(StatesGroup):
     choosing_origin = State()
     choosing_date = State()
+
+
+class MultiTransportStates(StatesGroup):
+    choosing_origin = State()
+    choosing_destination = State()
+    choosing_date = State()
+
+
+class HotelSearchStates(StatesGroup):
+    choosing_city = State()
+    choosing_check_in = State()
+    choosing_check_out = State()
+
+
+class TripPlannerStates(StatesGroup):
+    choosing_origin = State()
+    choosing_destination = State()
+    choosing_departure = State()
+    choosing_return = State()
