@@ -21,7 +21,18 @@ def main() -> int:
     with urllib.request.urlopen(request, timeout=30) as response:
         raw = response.read()
 
-    text = raw.decode("utf-8-sig")
+    text = None
+    for encoding in ("utf-8-sig", "cp1251"):
+        try:
+            candidate = raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+        lowered = candidate.lower()
+        if "страна" in lowered and "общеграждан" in lowered:
+            text = candidate
+            break
+    if text is None:
+        raise RuntimeError("Could not decode KDMID CSV as UTF-8 or Windows-1251")
     sample = text[:8192]
     try:
         delimiter = csv.Sniffer().sniff(sample, delimiters=";,\t").delimiter
