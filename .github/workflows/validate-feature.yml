@@ -14,6 +14,12 @@ on:
       - "bot/main.py"
       - "tests/test_travel_planner.py"
       - "tests/test_channel_publisher.py"
+      - "bot/handlers/entry.py"
+      - "bot/services/entry_rules.py"
+      - "bot/services/fast_browse.py"
+      - "bot/handlers/browse.py"
+      - "bot/handlers/discover.py"
+      - "tests/test_entry_rules.py"
 
 permissions:
   contents: read
@@ -39,4 +45,4 @@ jobs:
           DB_TYPE: sqlite
           DB_NAME: test_flight_bot
           PYTHONPATH: .
-        run: pytest -q tests/test_channel_publisher.py tests/test_travel_planner.py
+        run: pytest -q tests/test_channel_publisher.py tests/test_travel_planner.py tests/test_entry_rules.py
