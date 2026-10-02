@@ -1,0 +1,63 @@
+import pytest
+
+from bot.handlers import browse, discover
+from bot.services import entry_rules
+
+
+def test_parse_kdmid_csv_for_ordinary_passport():
+    text = (
+        "№;Страна въезда;Режим въезда с дипломатическим паспортом;"
+        "Режим въезда со служебным паспортом;"
+        "Режим въезда с общегражданским паспортом\n"
+        '1;Турция;без визы;без визы;"без визы до 60 дней"\n'
+        '2;ФРГ;требуется виза;требуется виза;"требуется виза"\n'
+    )
+    rows = entry_rules._parse_csv(text)
+
+    assert rows == [
+        {"country": "Турция", "ordinary_passport": "без визы до 60 дней"},
+        {"country": "ФРГ", "ordinary_passport": "требуется виза"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_find_entry_rule_uses_country_code_alias(monkeypatch):
+    async def fake_get_rules():
+        return (
+            [
+                {"country": "ФРГ", "ordinary_passport": "требуется виза"},
+                {"country": "Турция", "ordinary_passport": "без визы"},
+            ],
+            None,
+            False,
+        )
+
+    monkeypatch.setattr(entry_rules, "get_rules", fake_get_rules)
+    rule = await entry_rules.find_entry_rule("Германия", "DE")
+
+    assert rule is not None
+    assert rule.country == "ФРГ"
+    assert rule.ordinary_passport == "требуется виза"
+
+
+def test_fast_browse_keyboard_has_entry_button():
+    option = {
+        "origin": "MOW",
+        "destination": "IST",
+        "country_code": "TR",
+    }
+    keyboard = browse._selected_keyboard("abc", 0, option, "2026-10-03")
+    buttons = [button for row in keyboard.inline_keyboard for button in row]
+
+    assert any(button.callback_data == "entry:TR" for button in buttons)
+
+
+def test_deep_discovery_keyboard_has_entry_button():
+    offer = {
+        "_discovery": {"country_code": "TR"},
+        "search_results_url": "https://example.com",
+    }
+    keyboard = discover._discovery_keyboard("abc", [offer], 0)
+    buttons = [button for row in keyboard.inline_keyboard for button in row]
+
+    assert any(button.callback_data == "entry:TR" for button in buttons)
