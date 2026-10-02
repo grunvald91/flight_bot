@@ -75,6 +75,7 @@ async def load_indicative_destinations(origin: str, departure_date: str) -> Indi
             "destination": code,
             "city": city_resolver.get_city_name(code),
             "country": country_name_ru(country),
+            "country_code": country,
             "price": int(amount) if amount.is_integer() else amount,
             "departure_at": departure_at,
             "transfers": _stops(row),
