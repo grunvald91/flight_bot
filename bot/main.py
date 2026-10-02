@@ -81,7 +81,7 @@ async def main():
     try:
         bot_info = await bot.get_me()
         logger.info("Bot started: @%s", bot_info.username)
-        await dp.start_polling(bot, allowed_updates=["message", "callback_query", "inline_query"])
+        await dp.start_polling(bot, allowed_updates=["message", "channel_post", "callback_query", "inline_query"])
     finally:
         scheduler.shutdown(wait=False)
         await bot.session.close()
