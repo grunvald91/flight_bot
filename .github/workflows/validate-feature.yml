@@ -1,9 +1,19 @@
-name: Validate flight bot feature
+name: Validate flight bot features
 
 on:
   push:
     branches:
-      - feature/daily-cheap-channels
+      - main
+    paths:
+      - ".github/workflows/validate-feature.yml"
+      - "bot/handlers/travel.py"
+      - "bot/services/tutu_mcp.py"
+      - "bot/states/search.py"
+      - "bot/keyboards/common_kb.py"
+      - "bot/handlers/common.py"
+      - "bot/main.py"
+      - "tests/test_travel_planner.py"
+      - "tests/test_channel_publisher.py"
 
 permissions:
   contents: read
@@ -24,9 +34,9 @@ jobs:
           python -m pip install pytest pytest-asyncio aiosqlite greenlet
       - name: Compile
         run: python -m compileall -q bot database tests
-      - name: Daily channel feature tests
+      - name: Feature tests
         env:
           DB_TYPE: sqlite
           DB_NAME: test_flight_bot
           PYTHONPATH: .
-        run: pytest -q tests/test_channel_publisher.py
+        run: pytest -q tests/test_channel_publisher.py tests/test_travel_planner.py
