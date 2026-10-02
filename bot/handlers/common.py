@@ -24,7 +24,8 @@ WELCOME_TEXT = (
     "   <code>@{bot_username} Москва-Стамбул 15.03</code> — на дату\n"
     "   <code>@{bot_username} Москва</code> — дешёвые из города\n\n"
     "Выберите раздел ниже:\n"
-    "🟣 <b>Поиск на Туту</b> — актуальные рейсы, тарифы и багаж\n"
+    "🟣 <b>Поиск на Туту</b> — актуальные авиарейсы, тарифы и багаж\n"
+    "🧭 <b>Поездка</b> — сравнение транспорта, отели и общий бюджет\n"
     "⚡ <b>Быстрый обзор</b> — ориентировочные цены Aviasales; Туту по выбору\n"
     "🌍 <b>Куда дешевле за границу</b> — направления на выбранную дату\n"
     "👤 <b>Пассажир</b> — защищённый профиль для оформления\n"
@@ -45,6 +46,7 @@ HELP_TEXT = (
     "   <code>@{bot_username} избранные</code> — все избранные маршруты\n\n"
     "<b>Команды:</b>\n"
     "/tutu — поиск актуальных авиабилетов через Туту\n"
+    "/travel — сравнение транспорта, отели и поездка целиком\n"
     "/discover — дешёвые международные направления на дату\n"
     "/browse — быстрый обзор направлений и проверка выбранного\n"
     "/profile — защищённый профиль пассажира\n"
@@ -89,6 +91,12 @@ async def persistent_search(message: Message, state: FSMContext):
 async def persistent_tutu(message: Message, state: FSMContext):
     from bot.handlers.tutu import _start_tutu_search
     await _start_tutu_search(message, state)
+
+
+@router.message(F.text == "🧭 Поездка")
+async def persistent_travel(message: Message, state: FSMContext):
+    from bot.handlers.travel import cmd_travel
+    await cmd_travel(message, state)
 
 
 @router.message(F.text.in_(("🌍 Куда дешевле за границу", "🌍 Глубокий")))
