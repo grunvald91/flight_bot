@@ -100,3 +100,19 @@ def test_fast_browse_list_shows_entry_button_for_each_destination():
     assert "entry:AM" in callbacks
     assert "brsel:abc:0" in callbacks
     assert "brsel:abc:1" in callbacks
+
+
+@pytest.mark.asyncio
+async def test_kazakhstan_verified_override_does_not_depend_on_remote_dataset(monkeypatch):
+    async def fail_get_rules():
+        raise AssertionError("remote dataset should not be called for verified override")
+
+    monkeypatch.setattr(entry_rules, "get_rules", fail_get_rules)
+    rule = await entry_rules.find_entry_rule("Казахстан", "KZ")
+
+    assert rule is not None
+    assert "Виза не нужна" in rule.ordinary_passport
+    assert "90" in rule.ordinary_passport
+    assert "внутреннему российскому паспорту" in rule.details
+    assert "3 рабочих дней" in rule.details
+    assert "gov.kz" in rule.source_url
