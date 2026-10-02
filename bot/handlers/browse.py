@@ -152,7 +152,7 @@ def _format_page(payload: dict, page: int) -> str:
         f"<b>⚡ Зарубежные направления · {_date_label(meta['departure_date'])}</b>",
         f"Вариантов: <b>{len(options)}</b> · страница <b>{page + 1}/{total_pages}</b>",
         "Сортировка: цена ↑, при равной цене — меньше пересадок.",
-        "Выберите номер направления кнопкой ниже.",
+        "Выберите направление или сразу нажмите «ℹ️ Въезд».",
         "",
     ]
     for index, option in enumerate(page_options(options, page), start=page * PAGE_SIZE + 1):
@@ -169,9 +169,30 @@ def _format_page(payload: dict, page: int) -> str:
 
 def _page_keyboard(key: str, payload: dict, page: int) -> InlineKeyboardMarkup:
     options = payload["options"]
-    choices = [InlineKeyboardButton(text=str(index + 1), callback_data=f"brsel:{key}:{index}")
-               for index, _ in enumerate(page_options(options, page), start=page * PAGE_SIZE)]
-    rows = [choices[index:index + 5] for index in range(0, len(choices), 5)]
+    rows: list[list[InlineKeyboardButton]] = []
+    for index, option in enumerate(
+        page_options(options, page),
+        start=page * PAGE_SIZE,
+    ):
+        city = str(option.get("city") or option.get("destination") or "Направление")
+        if len(city) > 22:
+            city = city[:21] + "…"
+        row = [
+            InlineKeyboardButton(
+                text=f"{index + 1}. {city}",
+                callback_data=f"brsel:{key}:{index}",
+            )
+        ]
+        country_code = str(option.get("country_code") or "").upper()
+        if len(country_code) == 2:
+            row.append(
+                InlineKeyboardButton(
+                    text="ℹ️ Въезд",
+                    callback_data=f"entry:{country_code}",
+                )
+            )
+        rows.append(row)
+
     nav = []
     if page:
         nav.append(InlineKeyboardButton(text="◀️", callback_data=f"brpage:{key}:{page - 1}"))
