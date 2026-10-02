@@ -8,7 +8,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.types import BotCommand
 
 from bot.config import BOT_TOKEN
-from bot.handlers import admin, browse, calendar, common, discover, inline_mode, favorites, history, profile, subscriptions, search, stats, settings, travel, tutu
+from bot.handlers import admin, browse, calendar, common, discover, entry, inline_mode, favorites, history, profile, subscriptions, search, stats, settings, travel, tutu
 from bot.middlewares.logging_mw import RequestLoggingMiddleware
 from bot.services.city_resolver import city_resolver
 from bot.services.scheduler import setup_scheduler
@@ -70,6 +70,7 @@ async def main():
     dp.include_router(tutu.router)
     dp.include_router(travel.router)
     dp.include_router(discover.router)
+    dp.include_router(entry.router)
     dp.include_router(browse.router)
     dp.include_router(search.router)
     dp.include_router(favorites.router)
