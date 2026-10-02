@@ -7,6 +7,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot.services.city_resolver import city_resolver
+from bot.services.channel_publisher import bind_channel, get_channel_bindings, publish_tomorrow_channels
 from database.crud import (
     get_favorite_count_stats,
     get_request_stats,
@@ -494,3 +495,88 @@ async def cb_admin_section(callback: CallbackQuery):
     except Exception:
         await callback.message.answer(text, parse_mode="HTML", reply_markup=keyboard)
     await callback.answer()
+
+
+
+@router.channel_post(Command("bind_moscow"))
+async def bind_moscow_channel(message: Message):
+    binding = bind_channel(
+        "moscow",
+        chat_id=message.chat.id,
+        title=message.chat.title,
+        username=message.chat.username,
+    )
+    await message.answer(
+        "✅ Канал привязан к ежедневной публикации билетов из Москвы (MOW).\n"
+        f"chat_id: <code>{binding['chat_id']}</code>",
+        disable_notification=True,
+    )
+
+
+@router.channel_post(Command("bind_sochi"))
+async def bind_sochi_channel(message: Message):
+    binding = bind_channel(
+        "sochi",
+        chat_id=message.chat.id,
+        title=message.chat.title,
+        username=message.chat.username,
+    )
+    await message.answer(
+        "✅ Канал привязан к ежедневной публикации билетов из Сочи (AER).\n"
+        f"chat_id: <code>{binding['chat_id']}</code>",
+        disable_notification=True,
+    )
+
+
+@router.channel_post(Command("channelid"))
+async def show_channel_id(message: Message):
+    await message.answer(
+        f"chat_id этого канала: <code>{message.chat.id}</code>",
+        disable_notification=True,
+    )
+
+
+@router.message(Command("channels"))
+async def show_publication_channels(message: Message):
+    if not message.from_user or not _is_admin(message.from_user.id):
+        return
+
+    bindings = get_channel_bindings()
+    labels = {"moscow": "Москва", "sochi": "Сочи"}
+    lines = ["<b>📣 Каналы ежедневных авиаподборок</b>", ""]
+    for key in ("moscow", "sochi"):
+        binding = bindings.get(key)
+        if not binding:
+            lines.append(f"{labels[key]}: <b>не привязан</b>")
+            continue
+        title = binding.get("title") or "без названия"
+        username = f" @{binding['username']}" if binding.get("username") else ""
+        lines.append(
+            f"{labels[key]}: <b>{title}</b>{username}\n"
+            f"ID: <code>{binding.get('chat_id')}</code> · "
+            f"последний пост: {binding.get('last_published_date') or 'ещё не было'}"
+        )
+    lines.extend([
+        "",
+        "Для привязки опубликуйте в нужном канале:",
+        "<code>/bind_moscow</code> — канал Москвы",
+        "<code>/bind_sochi</code> — канал Сочи",
+    ])
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("publish_channels_now"))
+async def publish_channels_now(message: Message):
+    if not message.from_user or not _is_admin(message.from_user.id):
+        return
+
+    status = await message.answer(
+        "Запускаю публикацию на завтра для привязанных каналов. "
+        "Поиск проверяет международные направления через Туту."
+    )
+    result = await publish_tomorrow_channels(message.bot, force=True)
+    await status.edit_text(
+        "<b>Готово.</b>\n"
+        f"Москва: {result.get('moscow', 0)} направлений\n"
+        f"Сочи: {result.get('sochi', 0)} направлений"
+    )
