@@ -131,6 +131,125 @@ class TutuMCPClient:
         latest_meta["complete"] = exhausted and latest_meta.get("total_matched_exact") is not False
         return {"offers": combined, "meta": latest_meta}
 
+    async def search_multitransport(
+        self,
+        origin: str,
+        destination: str,
+        departure_date: str,
+        *,
+        adults: int = 1,
+        optimize_for: str = "price",
+        page_size: int = 12,
+        page: int = 1,
+        modes: list[str] | None = None,
+    ) -> dict:
+        arguments = {
+            "origin": origin,
+            "destination": destination,
+            "departure_date": departure_date,
+            "adults": adults,
+            "optimize_for": optimize_for,
+            "page": page,
+            "page_size": page_size,
+            "view": "compact",
+        }
+        if modes:
+            arguments["modes"] = modes
+        return await self._call("search_multitransport", arguments)
+
+    async def search_hotels(
+        self,
+        city_name: str,
+        check_in: str,
+        check_out: str,
+        *,
+        adults: int = 1,
+        children_ages: list[int] | None = None,
+        page_size: int = 10,
+        page: int = 1,
+    ) -> dict:
+        return await self._call(
+            "search_hotels",
+            {
+                "city_name": city_name,
+                "check_in": check_in,
+                "check_out": check_out,
+                "adults": adults,
+                "children_ages": children_ages or [],
+                "page": page,
+                "page_size": page_size,
+                "view": "compact",
+            },
+        )
+
+    async def search_rail(
+        self,
+        origin: str,
+        destination: str,
+        departure_date: str,
+        *,
+        passengers: int = 1,
+        page_size: int = 10,
+    ) -> dict:
+        return await self._call(
+            "search_rail",
+            {
+                "origin": origin,
+                "destination": destination,
+                "departure_date": departure_date,
+                "passengers": passengers,
+                "page": 1,
+                "page_size": page_size,
+                "sort": "price_asc",
+                "view": "compact",
+            },
+        )
+
+    async def search_bus(
+        self,
+        origin: str,
+        destination: str,
+        departure_date: str,
+        *,
+        adults: int = 1,
+        page_size: int = 10,
+    ) -> dict:
+        return await self._call(
+            "search_bus",
+            {
+                "origin": origin,
+                "destination": destination,
+                "departure_date": departure_date,
+                "adults": adults,
+                "children": 0,
+                "page": 1,
+                "page_size": page_size,
+                "sort": "price_asc",
+                "view": "compact",
+            },
+        )
+
+    async def search_etrain(
+        self,
+        origin: str,
+        destination: str,
+        departure_date: str,
+        *,
+        page_size: int = 10,
+    ) -> dict:
+        return await self._call(
+            "search_etrain",
+            {
+                "origin": origin,
+                "destination": destination,
+                "departure_date": departure_date,
+                "page": 1,
+                "page_size": page_size,
+                "sort": "price_asc",
+                "view": "compact",
+            },
+        )
+
     async def create_checkout_link(self, checkout_ref: dict) -> dict:
         return await self._call("create_checkout_link", dict(checkout_ref))
 
