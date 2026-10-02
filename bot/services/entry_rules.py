@@ -20,6 +20,7 @@ KDMID_VIEW_URL = "https://www.kdmid.ru/opendata/7704206201-country/doc/view.php"
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 CACHE_PATH = ROOT_DIR / "private_cache" / "kdmid_entry_rules.json"
+BUNDLED_DATA_PATH = ROOT_DIR / "data" / "kdmid_entry_rules.csv"
 CACHE_TTL = timedelta(hours=12)
 
 COUNTRY_ALIASES = {
@@ -33,6 +34,9 @@ COUNTRY_ALIASES = {
     "MD": ["Молдавия", "Молдова"],
     "MK": ["Северная Македония"],
     "TW": ["Тайвань, Китай", "Тайвань"],
+    "HK": ["Гонконг", "Специальный административный район Гонконг, Китай"],
+    "MO": ["Макао", "Специальный административный район Макао, Китай"],
+    "PS": ["Палестина", "Государство Палестина", "Палестинские территории"],
     "CF": ["ЦАР", "Центральноафриканская Республика"],
     "CD": ["ДР Конго", "Демократическая Республика Конго"],
     "CG": ["Республика Конго", "Конго"],
@@ -163,6 +167,23 @@ def _save_cache(rules: list[dict], fetched_at: datetime) -> None:
         logger.exception("Could not save KDMID entry-rules cache")
 
 
+def _load_bundled_rules() -> tuple[list[dict], datetime | None]:
+    try:
+        if not BUNDLED_DATA_PATH.exists():
+            return [], None
+        raw = BUNDLED_DATA_PATH.read_bytes()
+        text = raw.decode("utf-8-sig")
+        rules = _parse_csv(text)
+        modified_at = datetime.fromtimestamp(
+            BUNDLED_DATA_PATH.stat().st_mtime,
+            tz=timezone.utc,
+        )
+        return rules, modified_at
+    except Exception:
+        logger.exception("Could not read bundled KDMID entry-rules snapshot")
+        return [], None
+
+
 def _load_disk_cache() -> tuple[list[dict], datetime | None]:
     try:
         if not CACHE_PATH.exists():
@@ -229,6 +250,15 @@ async def get_rules() -> tuple[list[dict], datetime | None, bool]:
             _memory_rules = disk_rules
             _memory_loaded_at = disk_at or now
             return disk_rules, disk_at, True
+
+        bundled_rules, bundled_at = _load_bundled_rules()
+        if bundled_rules:
+            _memory_rules = bundled_rules
+            _memory_loaded_at = bundled_at or now
+            bundled_is_stale = bool(
+                bundled_at is None or now - bundled_at > timedelta(days=7)
+            )
+            return bundled_rules, bundled_at, bundled_is_stale
         raise
 
 
