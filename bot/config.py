@@ -1,7 +1,9 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# systemd supplies secrets via EnvironmentFile; a DynamicUser must not read .env directly.
+if not os.getenv("BOT_TOKEN"):
+    load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 TRAVELPAYOUTS_TOKEN = os.getenv("TRAVELPAYOUTS_TOKEN", "")
@@ -21,6 +23,10 @@ else:
 
 TIMEZONE = os.getenv("TIMEZONE", "Europe/Moscow")
 CACHE_TTL_MINUTES = int(os.getenv("CACHE_TTL_MINUTES", "5"))
+PASSENGER_WEBAPP_URL = os.getenv(
+    "PASSENGER_WEBAPP_URL",
+    "https://flight-profile.bandbook.site",
+).rstrip("/")
 
 TRAVELPAYOUTS_BASE_URL = "https://api.travelpayouts.com"
 AVIASALES_LINK = "https://www.aviasales.ru/search"

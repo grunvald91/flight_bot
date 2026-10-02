@@ -1,4 +1,9 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 
 
 def ticket_keyboard(
@@ -195,6 +200,10 @@ def main_menu_keyboard(user_id: int | None = None) -> InlineKeyboardMarkup:
     """Главное меню бота. Для админов добавляет кнопку '🛠 Админка'."""
     rows = [
         [InlineKeyboardButton(text="🔍 Найти билеты", switch_inline_query_current_chat="")],
+        [InlineKeyboardButton(text="🟣 Поиск на Туту", callback_data="tutu:start")],
+        [InlineKeyboardButton(text="⚡ Быстрый обзор направлений", callback_data="menu:browse")],
+        [InlineKeyboardButton(text="🌍 Куда дешевле за границу", callback_data="menu:discover")],
+        [InlineKeyboardButton(text="👤 Профиль пассажира", callback_data="profile:open")],
         [InlineKeyboardButton(text="⭐ Избранные маршруты", callback_data="menu:favorites")],
         [InlineKeyboardButton(text="🔔 Слежение за ценой", callback_data="menu:subscriptions")],
         [
@@ -212,3 +221,17 @@ def main_menu_keyboard(user_id: int | None = None) -> InlineKeyboardMarkup:
             pass
 
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def persistent_menu_keyboard() -> ReplyKeyboardMarkup:
+    """Compact primary actions; the full set remains in the inline main menu."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🔍 Найти билеты"), KeyboardButton(text="🟣 Поиск на Туту")],
+            [KeyboardButton(text="⚡ Быстрый"), KeyboardButton(text="🌍 Глубокий")],
+            [KeyboardButton(text="🏠 Меню")],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Выберите функцию",
+    )

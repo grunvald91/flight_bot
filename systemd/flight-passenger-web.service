@@ -1,0 +1,36 @@
+[Unit]
+Description=Flight Bot protected passenger profile web service
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/opt/flight_bot
+Environment=PYTHONUNBUFFERED=1
+Environment=PASSENGER_WEB_PORT=8790
+EnvironmentFile=/opt/flight_bot/.env
+LoadCredential=profile_kek:/etc/flight-bot-profile.key
+ExecStart=/opt/flight_bot/venv/bin/python -m bot.passenger_web
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

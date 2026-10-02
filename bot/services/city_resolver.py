@@ -11,9 +11,15 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 DASH_TRANSLATION = str.maketrans({
+    "‐": "-",
+    "‑": "-",
+    "‒": "-",
     "–": "-",
     "—": "-",
     "−": "-",
+    "﹘": "-",
+    "﹣": "-",
+    "－": "-",
 })
 TRIM_CHARS = " \t\n\r,.;:!?()[]{}<>\"'`"
 
@@ -23,6 +29,7 @@ class CityResolver:
         self.cities: dict[str, str] = {}
         self.cities_en: dict[str, str] = {}
         self.iata_to_name: dict[str, str] = {}
+        self.iata_to_country: dict[str, str] = {}
         self.airports: dict[str, str] = {}
         self.airlines: dict[str, str] = {}
         self.aliases: dict[str, str] = {}
@@ -125,12 +132,15 @@ class CityResolver:
 
                 name_ru = city.get("name", "")
                 name_en = city.get("name_translations", {}).get("en", "")
+                country_code = (city.get("country_code") or "").strip().upper()
 
                 if name_ru:
                     self._index_name(self.cities, name_ru, code)
                     self.iata_to_name[code] = name_ru
                 if name_en:
                     self._index_name(self.cities_en, name_en, code)
+                if country_code:
+                    self.iata_to_country[code] = country_code
 
             self._refresh_aliases()
 
@@ -190,6 +200,10 @@ class CityResolver:
     def get_airline_name(self, code: str) -> str:
         """Get airline name by IATA code."""
         return self.airlines.get(code, code)
+
+    def get_country_code(self, iata: str) -> str | None:
+        """Get ISO 3166-1 alpha-2 country code for a city IATA code."""
+        return self.iata_to_country.get((iata or "").upper())
 
     async def update(self):
         """Refresh reference data from API."""
