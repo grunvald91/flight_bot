@@ -185,7 +185,7 @@ class DiscoveryArchive:
         meta = payload.get("meta") or {}
         if type(meta.get("owner_id")) is not int or type(meta.get("chat_id")) is not int:
             raise ValueError("Browse results require owner and chat scope")
-        fields = ("origin", "destination", "city", "country", "price",
+        fields = ("origin", "destination", "city", "country", "country_code", "price",
                   "departure_at", "transfers", "airline", "flight_number", "duration")
         display = {
             "options": [{name: _scalar(row[name]) for name in fields if name in row}
