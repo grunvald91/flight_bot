@@ -121,7 +121,11 @@ def _decode_csv_bytes(raw: bytes) -> str:
             errors.append(exc)
             continue
         normalized = text.lower()
-        if "страна" in normalized and "общеграждан" in normalized:
+        first_line = normalized.splitlines()[0] if normalized.splitlines() else ""
+        if (
+            ("country" in first_line and "citizen" in first_line)
+            or ("страна" in normalized and "общеграждан" in normalized)
+        ):
             return text
     if errors:
         raise errors[-1]
