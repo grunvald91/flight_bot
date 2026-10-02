@@ -2,6 +2,7 @@ import pytest
 
 from bot.handlers import browse, discover
 from bot.services import entry_rules
+from bot.services.discovery_archive import DiscoveryArchive
 
 
 def test_parse_kdmid_csv_for_ordinary_passport():
@@ -132,3 +133,53 @@ def test_actual_kdmid_english_headers_parse():
         {"country": "Казахстан", "ordinary_passport": "без визы"},
         {"country": "Турция", "ordinary_passport": "без визы до 30 дней"},
     ]
+
+
+def test_fast_browse_archive_keeps_entry_buttons_after_paging(tmp_path):
+    archive = DiscoveryArchive(tmp_path / "browse.sqlite3")
+    payload = {
+        "options": [
+            {
+                "origin": "MOW",
+                "destination": "IST",
+                "city": "Стамбул",
+                "country": "Турция",
+                "country_code": "TR",
+                "price": 9000,
+                "transfers": 0,
+            },
+            {
+                "origin": "MOW",
+                "destination": "ALA",
+                "city": "Алматы",
+                "country": "Казахстан",
+                "country_code": "KZ",
+                "price": 10000,
+                "transfers": 0,
+            },
+        ],
+        "meta": {
+            "owner_id": 123,
+            "chat_id": 123,
+            "origin": "MOW",
+            "departure_date": "2026-10-03",
+            "unresolved": 0,
+            "source_rows": 2,
+        },
+    }
+
+    archive.put_browse("paging-test", payload)
+    restored = archive.get("paging-test")
+
+    assert restored["options"][0]["country_code"] == "TR"
+    assert restored["options"][1]["country_code"] == "KZ"
+
+    keyboard = browse._page_keyboard("paging-test", restored, 0)
+    callbacks = [
+        button.callback_data
+        for row in keyboard.inline_keyboard
+        for button in row
+        if button.callback_data
+    ]
+    assert "entry:TR" in callbacks
+    assert "entry:KZ" in callbacks
