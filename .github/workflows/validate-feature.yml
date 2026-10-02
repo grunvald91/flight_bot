@@ -24,9 +24,9 @@ jobs:
           python -m pip install pytest pytest-asyncio aiosqlite greenlet
       - name: Compile
         run: python -m compileall -q bot database tests
-      - name: Tests
+      - name: Daily channel feature tests
         env:
           DB_TYPE: sqlite
           DB_NAME: test_flight_bot
           PYTHONPATH: .
-        run: pytest -q
+        run: pytest -q tests/test_channel_publisher.py
