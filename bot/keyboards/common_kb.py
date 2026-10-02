@@ -200,13 +200,13 @@ def main_menu_keyboard(user_id: int | None = None) -> InlineKeyboardMarkup:
     """Главное меню бота. Для админов добавляет кнопку '🛠 Админка'."""
     rows = [
         [InlineKeyboardButton(text="🔍 Найти билеты", switch_inline_query_current_chat="")],
-        [InlineKeyboardButton(text="🟣 Поиск на Туту", callback_data="tutu:start")],
-        [InlineKeyboardButton(text="🧭 Поездка: транспорт + отель", callback_data="travel:start")],
-        [InlineKeyboardButton(text="⚡ Быстрый обзор направлений", callback_data="menu:browse")],
-        [InlineKeyboardButton(text="🌍 Куда дешевле за границу", callback_data="menu:discover")],
-        [InlineKeyboardButton(text="👤 Профиль пассажира", callback_data="profile:open")],
+        [InlineKeyboardButton(text="🟣 Билеты через Туту", callback_data="tutu:start")],
+        [InlineKeyboardButton(text="🧭 Поездка целиком", callback_data="travel:start")],
+        [InlineKeyboardButton(text="⚡ Дешёвые за границу", callback_data="menu:browse")],
+        [InlineKeyboardButton(text="🌍 Подробный поиск", callback_data="menu:discover")],
+        [InlineKeyboardButton(text="👤 Данные пассажира", callback_data="profile:open")],
         [InlineKeyboardButton(text="⭐ Избранные маршруты", callback_data="menu:favorites")],
-        [InlineKeyboardButton(text="🔔 Слежение за ценой", callback_data="menu:subscriptions")],
+        [InlineKeyboardButton(text="🔔 Следить за ценой", callback_data="menu:subscriptions")],
         [
             InlineKeyboardButton(text="📜 История", callback_data="menu:history"),
             InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu:settings"),
@@ -228,9 +228,9 @@ def persistent_menu_keyboard() -> ReplyKeyboardMarkup:
     """Compact primary actions; the full set remains in the inline main menu."""
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🔍 Найти билеты"), KeyboardButton(text="🟣 Поиск на Туту")],
-            [KeyboardButton(text="🧭 Поездка"), KeyboardButton(text="⚡ Быстрый")],
-            [KeyboardButton(text="🌍 Глубокий"), KeyboardButton(text="🏠 Меню")],
+            [KeyboardButton(text="🔍 Найти билеты"), KeyboardButton(text="🟣 Билеты через Туту")],
+            [KeyboardButton(text="🧭 Поездка целиком"), KeyboardButton(text="⚡ Дешёвые за границу")],
+            [KeyboardButton(text="🌍 Подробный поиск"), KeyboardButton(text="🏠 Меню")],
         ],
         resize_keyboard=True,
         is_persistent=True,
