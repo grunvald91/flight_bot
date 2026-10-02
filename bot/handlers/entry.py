@@ -47,8 +47,12 @@ async def show_entry_rules(callback: CallbackQuery):
         return
 
     regime = rule.ordinary_passport.strip()
-    if len(regime) > 2800:
-        regime = regime[:2797].rstrip() + "…"
+    if len(regime) > 2200:
+        regime = regime[:2197].rstrip() + "…"
+
+    details = rule.details.strip()
+    if len(details) > 1400:
+        details = details[:1397].rstrip() + "…"
 
     cache_note = (
         "\n\n⚠️ Сейчас показана последняя сохранённая копия официальных данных: "
@@ -56,16 +60,35 @@ async def show_entry_rules(callback: CallbackQuery):
         if rule.stale
         else ""
     )
+
+    lines = [
+        f"<b>ℹ️ {html.escape(rule.country)} — въезд для граждан РФ</b>",
+        "",
+        f"<b>Визовый режим:</b>\n{html.escape(regime)}",
+    ]
+    if details:
+        lines.extend(["", f"<b>Что важно:</b>\n{html.escape(details)}"])
+    if rule.updated_at:
+        lines.extend(["", f"<i>Проверено: {html.escape(str(rule.updated_at))}</i>"])
+    if cache_note:
+        lines.append(cache_note.strip())
+
+    buttons = [[
+        InlineKeyboardButton(
+            text="Официальный источник",
+            url=rule.source_url or KDMID_SOURCE_URL,
+        )
+    ]]
+    if rule.extra_source_url:
+        buttons.append([
+            InlineKeyboardButton(
+                text="Уведомление о прибытии",
+                url=rule.extra_source_url,
+            )
+        ])
+
     await callback.message.answer(
-        f"<b>ℹ️ {html.escape(rule.country)} — въезд для граждан РФ</b>\n\n"
-        f"<b>Обычный загранпаспорт:</b>\n{html.escape(regime)}"
-        f"{cache_note}\n\n"
-        "Это официальный <b>визовый режим</b>. Он не всегда включает все практические "
-        "условия поездки: срок действия паспорта, обратный билет, страховку, анкеты, "
-        "таможенные или санитарные требования. Их стоит проверить перед вылетом.\n\n"
-        "<i>Источник: Консульский департамент МИД России.</i>",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="Официальный источник МИД РФ", url=KDMID_SOURCE_URL)
-        ]]),
+        "\n".join(lines),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
         disable_web_page_preview=True,
     )
