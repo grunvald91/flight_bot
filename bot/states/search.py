@@ -6,3 +6,18 @@ class SearchStates(StatesGroup):
     choosing_destination = State()
     choosing_date = State()
     showing_results = State()
+
+
+class TutuSearchStates(StatesGroup):
+    choosing_origin = State()
+    choosing_destination = State()
+    choosing_date = State()
+
+
+class InternationalDiscoveryStates(StatesGroup):
+    choosing_origin = State()
+    choosing_date = State()
+
+class FastBrowseStates(StatesGroup):
+    choosing_origin = State()
+    choosing_date = State()

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <title>Профиль пассажира</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <script src="/assets/telegram-web-app.js"></script>
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+<main>
+  <div class="badge">🔒 HTTPS · AES-256-GCM</div>
+  <h1>Профиль пассажира</h1>
+  <p class="lead">Паспорт не отправляется сообщением в Telegram. Здесь нет аналитики, рекламных пикселей и сторонних форм. Данные передаются в Туту только при отдельном подтверждении неоплаченной брони; удаление профиля у нас не удаляет уже переданные данные у Туту.</p>
+  <div id="loading" class="spinner"></div>
+
+  <section id="existingCard" class="card hidden">
+    <h2>Сохранённый профиль</h2>
+    <div id="maskedSummary" class="summary"></div>
+    <p class="muted">Полный номер документа здесь повторно не показывается. Для изменения заполните форму целиком заново.</p>
+  </section>
+
+  <section id="profileCard" class="card hidden">
+    <h2 id="profileHeading">Данные одного взрослого пассажира</h2>
+    <p class="muted">Поддерживаются загранпаспорт и авиабилеты. Имя вводится латиницей точно как напечатано в документе.</p>
+    <form id="profileForm" autocomplete="off">
+      <div class="grid">
+        <label>Имя латиницей<input name="first_name" required maxlength="60" autocomplete="off"></label>
+        <label>Фамилия латиницей<input name="last_name" required maxlength="60" autocomplete="off"></label>
+        <label class="full">Отчество латиницей, если есть<input name="middle_name" maxlength="60" autocomplete="off"></label>
+        <label>Дата рождения<input name="birthday" type="date" required autocomplete="off"></label>
+        <label>Пол<select name="sex" required><option value="">Выберите</option><option value="MALE">Мужской</option><option value="FEMALE">Женский</option></select></label>
+        <label>Документ<select name="document_type" required><option value="FOREIGN_PASSPORT">Загранпаспорт</option></select></label>
+        <label>Номер документа<input name="document_number" required maxlength="30" autocomplete="off"></label>
+        <label>Действует до<input name="expires_at" type="date" required autocomplete="off"></label>
+        <label>Email для билета<input name="email" type="email" required maxlength="254" autocomplete="off"></label>
+        <label class="full">Телефон для билета<input name="phone" type="tel" required maxlength="20" placeholder="+79991234567" autocomplete="off"></label>
+      </div>
+      <label class="check"><input name="storage_consent" type="checkbox" required><span>Я согласен сохранить эти данные в зашифрованном профиле и передавать их в Туту только после отдельного подтверждения конкретного оформления.</span></label>
+      <button id="saveBtn" class="primary" type="submit">Сохранить зашифрованный профиль</button>
+      <button id="deleteBtn" class="danger hidden" type="button">Удалить профиль из рабочей базы</button>
+      <div id="profileStatus" class="status" role="status"></div>
+    </form>
+  </section>
+
+  <section id="bookingCard" class="card hidden">
+    <h2>Проверка перед созданием неоплаченной брони</h2>
+    <div class="notice">Здесь сохранённый паспорт показывается только в маске. Перед созданием брони повторно введите полные сведения в защищённую форму выше (не нажимая «Сохранить»), сверьте написание, дату рождения, пол, тип и номер документа, срок действия, email и телефон. Они должны точно совпасть с профилем. После подтверждения Туту создаст одну неоплаченную бронь. Автоматических повторов нет.</div>
+    <div id="tripSummary" class="summary"></div>
+    <h2>Пассажир и получатель билета</h2>
+    <div id="passengerSummary" class="summary"></div>
+    <label class="check"><input id="bookingConsent" type="checkbox"><span>Я повторно ввёл в защищённую форму выше и сверил полные паспортные и контактные данные; сейчас вижу их маску, маршрут, рейс, класс и цену. Подтверждаю создание неоплаченной брони.</span></label>
+    <button id="bookingBtn" class="primary" type="button" disabled>Подтвердить и создать бронь</button>
+    <div id="bookingStatus" class="status" role="status"></div>
+    <div id="paymentBox" class="hidden">
+      <div class="notice">Ссылка одноразовая и обычно действует около часа. Не пересылайте её и открывайте только самостоятельно. Если ссылка истекла, не создавайте новую бронь без проверки статуса предыдущей.</div>
+      <a id="payLink" class="pay" rel="noreferrer noopener">Перейти к оплате на Туту</a>
+    </div>
+  </section>
+</main>
+</body>
+</html>

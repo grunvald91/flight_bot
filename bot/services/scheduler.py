@@ -4,17 +4,18 @@ from datetime import datetime, timedelta, date
 from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from bot.config import MIN_PRICE_DROP
+from bot.config import DAILY_CHANNEL_HOUR, DAILY_CHANNEL_MINUTE, MIN_PRICE_DROP, TIMEZONE
 from bot.services.aviasales_api import aviasales_api
 from bot.services.notifications import notify_price_drop
 from bot.services.city_resolver import city_resolver
+from bot.services.channel_publisher import publish_tomorrow_channels
 from database.crud import get_all_active_subscriptions, update_subscription_price, deactivate_subscription, get_user_settings
 
 logger = logging.getLogger(__name__)
 
 
 async def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
-    scheduler = AsyncIOScheduler()
+    scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 
     scheduler.add_job(
         check_price_subscriptions,
@@ -39,6 +40,19 @@ async def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         hours=24,
         id="update_refs",
         replace_existing=True,
+    )
+
+    scheduler.add_job(
+        publish_tomorrow_channels,
+        "cron",
+        hour=DAILY_CHANNEL_HOUR,
+        minute=DAILY_CHANNEL_MINUTE,
+        args=[bot],
+        id="daily_cheapest_channels",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=3600,
     )
 
     return scheduler

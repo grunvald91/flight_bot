@@ -4,6 +4,7 @@
 *.log
 bot.log
 bot_venv.log
+private_cache/
 
 # Python
 __pycache__/

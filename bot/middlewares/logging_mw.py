@@ -6,6 +6,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, InlineQuery
 
 from database.crud import log_request
+from bot.services.privacy import request_log_identity
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class RequestLoggingMiddleware(BaseMiddleware):
         try:
             await self._log_event(event)
         except Exception as e:
-            logger.error("Logging middleware error: %s", e)
+            logger.error("Logging middleware failed; details suppressed")
 
         return await handler(event, data)
 
@@ -29,29 +30,32 @@ class RequestLoggingMiddleware(BaseMiddleware):
             user = event.from_user
             if not user:
                 return
-            text = event.text or ""
-            if text.startswith("/"):
+            if (event.text or "").split(maxsplit=1)[0].split("@", 1)[0] == "/profile":
+                return  # Do not persist identifiable metadata for profile entry.
+            if (event.text or "").startswith("/"):
                 req_type = "command"
             else:
                 req_type = "message"
             await log_request(
-                telegram_id=user.id,
-                username=user.username,
-                first_name=user.first_name,
+                telegram_id=request_log_identity(user.id),
+                username=None,
+                first_name=None,
                 request_type=req_type,
-                request_data=text[:500],
+                request_data=None,
             )
 
         elif isinstance(event, CallbackQuery):
             user = event.from_user
             if not user:
                 return
+            if (event.data or "").startswith(("tutubook:", "profile:")):
+                return
             await log_request(
-                telegram_id=user.id,
-                username=user.username,
-                first_name=user.first_name,
+                telegram_id=request_log_identity(user.id),
+                username=None,
+                first_name=None,
                 request_type="callback",
-                request_data=event.data[:500] if event.data else None,
+                request_data=None,
             )
 
         elif isinstance(event, InlineQuery):
@@ -59,9 +63,9 @@ class RequestLoggingMiddleware(BaseMiddleware):
             if not user:
                 return
             await log_request(
-                telegram_id=user.id,
-                username=user.username,
-                first_name=user.first_name,
+                telegram_id=request_log_identity(user.id),
+                username=None,
+                first_name=None,
                 request_type="inline",
-                request_data=event.query[:500] if event.query else None,
+                request_data=None,
             )
