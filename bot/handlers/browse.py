@@ -38,9 +38,9 @@ async def _start_browse(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(FastBrowseStates.choosing_origin)
     await message.answer(
-        "<b>⚡ Быстрый обзор направлений</b>\n\n"
-        "Получаю ориентировочные цены Aviasales на зарубежные направления. "
-        "Туту проверю только после выбора направления.\n\n"
+        "<b>⚡ Дешёвые билеты за границу</b>\n\n"
+        "Покажу, в какие страны и города сейчас дешевле всего улететь на выбранную дату. "
+        "После выбора направления можно открыть билет или посмотреть, нужна ли виза и какие документы нужны.\n\n"
         "Укажите город вылета, например: <code>Сочи</code> или <code>Москва</code>.",
         reply_markup=persistent_menu_keyboard(),
     )
@@ -152,7 +152,7 @@ def _format_page(payload: dict, page: int) -> str:
         f"<b>⚡ Зарубежные направления · {_date_label(meta['departure_date'])}</b>",
         f"Вариантов: <b>{len(options)}</b> · страница <b>{page + 1}/{total_pages}</b>",
         "Сортировка: цена ↑, при равной цене — меньше пересадок.",
-        "Выберите направление или сразу нажмите «ℹ️ Въезд».",
+        "Выберите направление или сразу нажмите «ℹ️ Виза и документы».",
         "",
     ]
     for index, option in enumerate(page_options(options, page), start=page * PAGE_SIZE + 1):
@@ -187,7 +187,7 @@ def _page_keyboard(key: str, payload: dict, page: int) -> InlineKeyboardMarkup:
         if len(country_code) == 2:
             row.append(
                 InlineKeyboardButton(
-                    text="ℹ️ Въезд",
+                    text="ℹ️ Виза и документы",
                     callback_data=f"entry:{country_code}",
                 )
             )
@@ -249,7 +249,7 @@ def _selected_keyboard(key: str, index: int, option: dict, departure_date: str) 
     if len(country_code) == 2:
         rows.append([
             InlineKeyboardButton(
-                text="ℹ️ Въезд для граждан РФ",
+                text="ℹ️ Виза и документы",
                 callback_data=f"entry:{country_code}",
             )
         ])
