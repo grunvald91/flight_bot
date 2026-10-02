@@ -571,8 +571,7 @@ async def publish_channels_now(message: Message):
         return
 
     status = await message.answer(
-        "Запускаю публикацию на завтра для привязанных каналов. "
-        "Поиск проверяет международные направления через Туту."
+        "Запускаю быстрый поиск на завтра для привязанных каналов через Aviasales."
     )
     result = await publish_tomorrow_channels(message.bot, force=True)
     await status.edit_text(
