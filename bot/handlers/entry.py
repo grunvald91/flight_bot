@@ -21,14 +21,14 @@ async def show_entry_rules(callback: CallbackQuery):
         return
 
     country_name = country_name_ru(country_code)
-    await callback.answer("Проверяю официальный визовый режим МИД РФ…")
+    await callback.answer("Проверяю визу и документы для поездки…")
 
     try:
         rule = await find_entry_rule(country_name, country_code)
     except Exception as exc:
         logger.warning("KDMID entry lookup failed for %s: %s", country_code, exc)
         await callback.message.answer(
-            f"<b>ℹ️ {html.escape(country_name)} — въезд для граждан РФ</b>\n\n"
+            f"<b>ℹ️ {html.escape(country_name)} — виза и документы для граждан РФ</b>\n\n"
             "⚠️ Не удалось загрузить правила. Откройте официальный источник.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text="Официальный источник МИД РФ", url=KDMID_SOURCE_URL)
@@ -38,7 +38,7 @@ async def show_entry_rules(callback: CallbackQuery):
 
     if rule is None:
         await callback.message.answer(
-            f"<b>ℹ️ {html.escape(country_name)} — въезд для граждан РФ</b>\n\n"
+            f"<b>ℹ️ {html.escape(country_name)} — виза и документы для граждан РФ</b>\n\n"
             "⚠️ Правила для этой страны не найдены автоматически.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text="Официальный источник МИД РФ", url=KDMID_SOURCE_URL)
@@ -47,7 +47,7 @@ async def show_entry_rules(callback: CallbackQuery):
         return
 
     lines = [
-        f"<b>ℹ️ {html.escape(rule.country)} — въезд для граждан РФ</b>",
+        f"<b>ℹ️ {html.escape(rule.country)} — виза и документы для граждан РФ</b>",
         "",
         *_simple_entry_lines(rule.ordinary_passport, rule.details),
     ]
