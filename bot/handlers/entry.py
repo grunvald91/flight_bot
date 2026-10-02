@@ -1,5 +1,7 @@
 import html
 import logging
+import re
+from datetime import datetime
 
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -46,49 +48,96 @@ async def show_entry_rules(callback: CallbackQuery):
         )
         return
 
-    regime = rule.ordinary_passport.strip()
-    if len(regime) > 2200:
-        regime = regime[:2197].rstrip() + "…"
-
-    details = rule.details.strip()
-    if len(details) > 1400:
-        details = details[:1397].rstrip() + "…"
-
-    cache_note = (
-        "\n\n⚠️ Сейчас показана последняя сохранённая копия официальных данных: "
-        "обновление источника временно недоступно."
-        if rule.stale
-        else ""
-    )
-
     lines = [
         f"<b>ℹ️ {html.escape(rule.country)} — въезд для граждан РФ</b>",
         "",
-        f"<b>Визовый режим:</b>\n{html.escape(regime)}",
+        *_simple_entry_lines(rule.ordinary_passport, rule.details),
     ]
-    if details:
-        lines.extend(["", f"<b>Что важно:</b>\n{html.escape(details)}"])
-    if rule.updated_at:
-        lines.extend(["", f"<i>Проверено: {html.escape(str(rule.updated_at))}</i>"])
-    if cache_note:
-        lines.append(cache_note.strip())
+
+    checked = _format_checked_at(rule.updated_at)
+    if checked:
+        lines.extend(["", f"<i>Проверено: {checked}</i>"])
+    if rule.stale:
+        lines.append("<i>⚠️ Используется сохранённая копия официальных данных.</i>")
 
     buttons = [[
         InlineKeyboardButton(
-            text="Официальный источник",
+            text="Официальные правила",
             url=rule.source_url or KDMID_SOURCE_URL,
         )
     ]]
-    if rule.extra_source_url:
-        buttons.append([
-            InlineKeyboardButton(
-                text="Уведомление о прибытии",
-                url=rule.extra_source_url,
-            )
-        ])
 
     await callback.message.answer(
         "\n".join(lines),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
         disable_web_page_preview=True,
     )
+
+
+def _simple_entry_lines(regime: str, details: str = "") -> list[str]:
+    raw = " ".join((regime or "").split())
+    low = raw.lower().replace("ё", "е")
+    lines: list[str] = []
+
+    if "без виз" in low or "виза не нуж" in low or "виза не треб" in low:
+        lines.append("✅ <b>Виза не нужна</b>")
+    elif "электрон" in low and "виз" in low:
+        lines.append("🟡 <b>Нужна электронная виза</b>")
+    elif "по прибыт" in low and "виз" in low:
+        lines.append("🟡 <b>Виза оформляется по прибытии</b>")
+    elif "виз" in low:
+        lines.append("🔴 <b>Нужна виза</b>")
+    else:
+        lines.append("ℹ️ <b>Есть специальные условия въезда</b>")
+
+    limit_180 = re.search(
+        r"(\d{1,3})\s*(?:дн\w*)[^.]{0,50}?(?:180|ста восьмидесят)",
+        low,
+    )
+    stay = re.search(
+        r"(?:до|не более|срок(?:ом)? до)\s*(\d{1,3})\s*(?:дн\w*|сут\w*)",
+        low,
+    )
+
+    if limit_180:
+        days = limit_180.group(1)
+        lines.append(f"🕒 <b>Срок:</b> до {days} дней в течение 180 дней")
+    elif stay:
+        days = stay.group(1)
+        lines.append(f"🕒 <b>Срок:</b> до {days} дней")
+
+    detail_text = (details or "").strip()
+    for part in detail_text.splitlines():
+        clean = " ".join(part.split()).strip()
+        low_part = clean.lower().replace("ё", "е")
+        if not clean:
+            continue
+        if low_part.startswith("документы:"):
+            value = clean.split(":", 1)[1].strip()
+            if value:
+                lines.append(f"🪪 <b>Документы:</b> {html.escape(value)}")
+        elif low_part.startswith("уведомление:"):
+            value = clean.split(":", 1)[1].strip()
+            if value:
+                lines.append(f"🏠 <b>По прибытии:</b> {html.escape(value)}")
+
+    if len(lines) == 1 and raw:
+        short = raw
+        if len(short) > 220:
+            short = short[:217].rstrip() + "…"
+        lines.append(f"📌 {html.escape(short)}")
+
+    return lines
+
+
+def _format_checked_at(value: str | None) -> str | None:
+    if not value:
+        return None
+    raw = str(value).strip()
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).strftime("%d.%m.%Y")
+    except ValueError:
+        try:
+            return datetime.strptime(raw[:10], "%Y-%m-%d").strftime("%d.%m.%Y")
+        except ValueError:
+            return None
