@@ -92,11 +92,11 @@ async def _run_discovery(message: Message, origin: str, departure_date: str,
                          owner_id: int | None = None):
     origin_name = city_resolver.get_city_name(origin)
     progress = await message.answer(
-        f"<b>Глубокий поиск международных направлений</b>\n\n"
+        f"<b>Подробный поиск билетов за границу</b>\n\n"
         f"Вылет из: <b>{html.escape(origin_name)}</b>\n"
         f"Дата: <b>{_format_date(departure_date)}</b>\n\n"
-        "Собираю все доступные страницы направлений и проверяю каждый зарубежный маршрут через Туту. "
-        "Поиск может занять заметное время. Билет покажу только после завершения всех проверок."
+        "Проверяю найденные зарубежные направления и ищу конкретные билеты через Туту. "
+        "Такой поиск занимает больше времени, зато результат будет точнее."
     )
 
     last_progress_text = ""
@@ -104,7 +104,7 @@ async def _run_discovery(message: Message, origin: str, departure_date: str,
     async def update_progress(checked: int, total: int, found: int) -> None:
         nonlocal last_progress_text
         text = (
-            f"<b>Глубокий поиск международных направлений</b>\n\n"
+            f"<b>Подробный поиск билетов за границу</b>\n\n"
             f"Вылет из: <b>{html.escape(origin_name)}</b>\n"
             f"Дата: <b>{_format_date(departure_date)}</b>\n\n"
             f"Проверено через Туту: <b>{checked} из {total}</b>\n"
@@ -333,7 +333,7 @@ def _discovery_keyboard(
     if len(country_code) == 2:
         rows.append([
             InlineKeyboardButton(
-                text="ℹ️ Въезд для граждан РФ",
+                text="ℹ️ Виза и документы",
                 callback_data=f"entry:{country_code}",
             )
         ])
