@@ -141,14 +141,20 @@ def _parse_csv(text: str) -> list[dict]:
         return []
 
     country_key = next(
-        (key for key in rows[0].keys() if "страна" in _normalize(str(key))),
+        (
+            key
+            for key in rows[0].keys()
+            if _normalize(str(key)) == "country"
+            or "страна" in _normalize(str(key))
+        ),
         None,
     )
     passport_key = next(
         (
             key
             for key in rows[0].keys()
-            if "общеграждан" in _normalize(str(key))
+            if _normalize(str(key)) == "citizen"
+            or "общеграждан" in _normalize(str(key))
         ),
         None,
     )
