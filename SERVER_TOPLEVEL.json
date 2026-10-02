@@ -1,0 +1,142 @@
+[
+  {
+    "name": ".env",
+    "kind": "file",
+    "size": 290
+  },
+  {
+    "name": ".env.example",
+    "kind": "file",
+    "size": 195
+  },
+  {
+    "name": ".pytest_cache",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "USER_GUIDE.md",
+    "kind": "file",
+    "size": 10756
+  },
+  {
+    "name": "__pycache__",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "_backup_20260529_113616",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "_backup_20260529_115037",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "_backup_deep_discovery_20260922_185635",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "_backup_discovery_20260922_163432",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "_backup_tutu_20260921_105425",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "_backup_tutu_carousel_20260922_113201",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "bot",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "bot.log",
+    "kind": "file",
+    "size": 0
+  },
+  {
+    "name": "bot_venv.log",
+    "kind": "file",
+    "size": 0
+  },
+  {
+    "name": "check_bot_error.py",
+    "kind": "file",
+    "size": 1154
+  },
+  {
+    "name": "clean_main.py",
+    "kind": "file",
+    "size": 2182
+  },
+  {
+    "name": "data",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "database",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "deploy.py",
+    "kind": "file",
+    "size": 6178
+  },
+  {
+    "name": "fix_db_perms.py",
+    "kind": "file",
+    "size": 1110
+  },
+  {
+    "name": "flight_bot.service",
+    "kind": "file",
+    "size": 301
+  },
+  {
+    "name": "main.py",
+    "kind": "file",
+    "size": 2182
+  },
+  {
+    "name": "private_cache",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "requirements.txt",
+    "kind": "file",
+    "size": 215
+  },
+  {
+    "name": "systemd",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "test_api_link.py",
+    "kind": "file",
+    "size": 1591
+  },
+  {
+    "name": "tests",
+    "kind": "dir",
+    "size": 4096
+  },
+  {
+    "name": "venv",
+    "kind": "dir",
+    "size": 4096
+  }
+]

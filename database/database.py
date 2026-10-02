@@ -20,9 +20,52 @@ async_session_maker = async_sessionmaker(
 async def init_db():
     from database.models import Base
     async with engine.begin() as conn:
+        if conn.dialect.name == "postgresql":
+            # create_all can create an index on model columns missing from an
+            # older table. Migrate existing tables before that index is built.
+            if await conn.scalar(text("SELECT to_regclass('passenger_profiles') IS NOT NULL")):
+                await _ensure_passenger_profile_columns(conn)
+            if await conn.scalar(text("SELECT to_regclass('passenger_web_launches') IS NOT NULL")):
+                await _ensure_passenger_web_launch_columns(conn)
         await conn.run_sync(Base.metadata.create_all)
         await _ensure_user_settings_columns(conn)
         await _ensure_price_subscriptions_columns(conn)
+        await _ensure_passenger_profile_columns(conn)
+
+
+async def _ensure_passenger_web_launch_columns(conn):
+    columns = {
+        "checkout_hash": "VARCHAR(64)",
+        "checkout_state": "VARCHAR(24)",
+        "snapshot_hash": "VARCHAR(64)",
+        "confirmed_profile_version": "INTEGER",
+        "confirmation_hash": "VARCHAR(64)",
+        "booking_attempted_at": "TIMESTAMP WITHOUT TIME ZONE",
+        "booking_status": "VARCHAR(20)",
+        "result_encrypted": "BYTEA",
+    }
+    for name, kind in columns.items():
+        await conn.execute(text(f"ALTER TABLE passenger_web_launches ADD COLUMN IF NOT EXISTS {name} {kind}"))
+
+
+async def _ensure_passenger_profile_columns(conn):
+    """Add nullable crypto metadata to older profile tables without rewriting ciphertext."""
+    columns = {"profile_id": "VARCHAR(32)", "wrapped_dek": "BYTEA", "kek_id": "VARCHAR(64)"}
+    if conn.dialect.name == "postgresql":
+        for name, kind in columns.items():
+            await conn.execute(text(f"ALTER TABLE passenger_profiles ADD COLUMN IF NOT EXISTS {name} {kind}"))
+        await conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_passenger_profiles_profile_id "
+            "ON passenger_profiles (profile_id) WHERE profile_id IS NOT NULL"
+        ))
+    elif conn.dialect.name == "sqlite":
+        existing = {row[1] for row in (await conn.execute(text("PRAGMA table_info(passenger_profiles)"))).fetchall()}
+        for name, kind in {**columns, "wrapped_dek": "BLOB"}.items():
+            if name not in existing:
+                await conn.execute(text(f"ALTER TABLE passenger_profiles ADD COLUMN {name} {kind}"))
+        await conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_passenger_profiles_profile_id ON passenger_profiles (profile_id)"
+        ))
 
 
 async def _ensure_user_settings_columns(conn):

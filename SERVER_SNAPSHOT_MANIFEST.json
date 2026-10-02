@@ -1,0 +1,442 @@
+{
+  "source_path": "/opt/flight_bot",
+  "captured_at_utc": "2026-10-02T10:24:47.238214+00:00",
+  "allowed_dirs": [
+    "bot",
+    "data",
+    "database",
+    "tests"
+  ],
+  "allowed_root_files": [
+    ".env.example",
+    ".gitignore",
+    "README.md",
+    "USER_GUIDE.md",
+    "flight_bot.service",
+    "main.py",
+    "requirements.txt"
+  ],
+  "max_file_size": 5242880,
+  "files": [
+    {
+      "path": ".env.example",
+      "size": 195,
+      "sha256": "212b287252cad149773de1972b3c21baab81a42700f2427a18707cb4abea407c",
+      "mtime_utc": "2026-02-15T07:57:12+00:00"
+    },
+    {
+      "path": "USER_GUIDE.md",
+      "size": 10756,
+      "sha256": "0713b24b1aaef2c1c9d277601396b59b79f6f4647bd416031cd3c0497bba538f",
+      "mtime_utc": "2026-02-15T12:35:36+00:00"
+    },
+    {
+      "path": "bot/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mtime_utc": "2026-02-15T07:57:17+00:00"
+    },
+    {
+      "path": "bot/config.py",
+      "size": 1280,
+      "sha256": "c1e8d34ed903ef4a9959e85592fe553116d1f7ed21d50ad067ba56374ff07b8a",
+      "mtime_utc": "2026-09-23T10:00:27+00:00"
+    },
+    {
+      "path": "bot/handlers/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mtime_utc": "2026-02-15T07:57:18+00:00"
+    },
+    {
+      "path": "bot/handlers/admin.py",
+      "size": 19436,
+      "sha256": "2ac81d6c3011c8383341e846f4ea6f769e61c5ad4a498ad34d0c5197d5da1ef5",
+      "mtime_utc": "2026-05-29T09:06:03+00:00"
+    },
+    {
+      "path": "bot/handlers/browse.py",
+      "size": 13371,
+      "sha256": "1e36ed28963f3dbe7971ddded81a9c2505bd22bcdf4782e1ae4922f59122deec",
+      "mtime_utc": "2026-09-26T04:49:47+00:00"
+    },
+    {
+      "path": "bot/handlers/calendar.py",
+      "size": 1206,
+      "sha256": "5c8db96658e0b33793a669003965cd92cafebcb977def94c2b40ca26eabd77b0",
+      "mtime_utc": "2026-09-22T13:31:48+00:00"
+    },
+    {
+      "path": "bot/handlers/common.py",
+      "size": 12687,
+      "sha256": "6f58e35d0f722268d0ced8559160c937694e6b5bc59e635429a0125b7a58b8bc",
+      "mtime_utc": "2026-09-26T04:48:49+00:00"
+    },
+    {
+      "path": "bot/handlers/discover.py",
+      "size": 15487,
+      "sha256": "247cdc3ed8519162c8c6c494c30f67c0664d59a8e5e29aee9abce8c133d835d1",
+      "mtime_utc": "2026-09-24T16:22:00+00:00"
+    },
+    {
+      "path": "bot/handlers/favorites.py",
+      "size": 5181,
+      "sha256": "692ec829128b687cab7e6592e14a001d1f67ad81563ded109cbb8646615fadbf",
+      "mtime_utc": "2026-02-24T11:44:41+00:00"
+    },
+    {
+      "path": "bot/handlers/history.py",
+      "size": 2259,
+      "sha256": "6e46937e3e4b1549f884bb617d7785d5ca225a80cdfcf6ee2f6b35a238308ac4",
+      "mtime_utc": "2026-02-16T12:42:59+00:00"
+    },
+    {
+      "path": "bot/handlers/inline_mode.py",
+      "size": 33737,
+      "sha256": "3443d5f75d4cf1cc2347fdc5b2a9ae14b2e7c59d8dd456aadb60c34c5ee9ce95",
+      "mtime_utc": "2026-04-07T07:18:25+00:00"
+    },
+    {
+      "path": "bot/handlers/profile.py",
+      "size": 5344,
+      "sha256": "efa11d0d944fc3d3d696c89d7fc8837b86cbb737a9d57916b12bdbc21ce39339",
+      "mtime_utc": "2026-09-24T15:33:52+00:00"
+    },
+    {
+      "path": "bot/handlers/search.py",
+      "size": 11792,
+      "sha256": "b34e00cf4181384572eeca7916520128e4a0365437add9e9c1e7ca5d7e37cf1e",
+      "mtime_utc": "2026-09-22T13:31:47+00:00"
+    },
+    {
+      "path": "bot/handlers/settings.py",
+      "size": 15013,
+      "sha256": "da3a2f24335669c66cf7f83907e807c1efb63b3dbf27f238685719a9f0e93f5c",
+      "mtime_utc": "2026-04-04T09:20:54+00:00"
+    },
+    {
+      "path": "bot/handlers/stats.py",
+      "size": 2812,
+      "sha256": "d3f43130372e7f73094bc06b853128771f98febab7e588f567f2a39a78c65679",
+      "mtime_utc": "2026-02-24T13:17:54+00:00"
+    },
+    {
+      "path": "bot/handlers/subscriptions.py",
+      "size": 34615,
+      "sha256": "a0d523c074d07d837d70f077fdb0174ac0d7615a9c29f0a64bf3ff98aa055e68",
+      "mtime_utc": "2026-05-29T08:34:47+00:00"
+    },
+    {
+      "path": "bot/handlers/tutu.py",
+      "size": 24829,
+      "sha256": "a27921b905b4ef0e9ce91e5b1f5694f101b52c0194a5a2d680dc6350a82afd39",
+      "mtime_utc": "2026-09-26T05:27:07+00:00"
+    },
+    {
+      "path": "bot/keyboards/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mtime_utc": "2026-02-15T07:57:20+00:00"
+    },
+    {
+      "path": "bot/keyboards/calendar_kb.py",
+      "size": 2552,
+      "sha256": "8e485be01e7a491cc3b69083fee1c62420d0202082ac5b0572c5d2cbf9181290",
+      "mtime_utc": "2026-09-22T13:31:48+00:00"
+    },
+    {
+      "path": "bot/keyboards/common_kb.py",
+      "size": 9034,
+      "sha256": "fea499a63d2834853fae75cd2cd9091d559b64c3374d693fe1dc0878a866e574",
+      "mtime_utc": "2026-09-26T04:48:46+00:00"
+    },
+    {
+      "path": "bot/main.py",
+      "size": 3555,
+      "sha256": "2b88b5fa8e4da075766e0555d26de1b026561df1252e7d6a674e7dd9420143e2",
+      "mtime_utc": "2026-09-25T19:53:26+00:00"
+    },
+    {
+      "path": "bot/middlewares/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mtime_utc": "2026-02-24T13:17:54+00:00"
+    },
+    {
+      "path": "bot/middlewares/logging_mw.py",
+      "size": 2425,
+      "sha256": "8df859af4a7bc2c16e87b942875a35af262d89f8e6104c87ac4599cddd088c2c",
+      "mtime_utc": "2026-09-24T07:57:36+00:00"
+    },
+    {
+      "path": "bot/passenger_web.py",
+      "size": 25017,
+      "sha256": "13ecf90daf983a069519a2ae8fe47a9fbf9079934b2f57eaddd314b936f4b216",
+      "mtime_utc": "2026-09-24T07:57:35+00:00"
+    },
+    {
+      "path": "bot/services/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mtime_utc": "2026-02-15T07:57:22+00:00"
+    },
+    {
+      "path": "bot/services/aviasales_api.py",
+      "size": 23931,
+      "sha256": "0d5fff0dd87451d3fbc53c26f85d4f15f1ff963e4cdfb1c3db402488c5403a71",
+      "mtime_utc": "2026-09-25T20:42:32+00:00"
+    },
+    {
+      "path": "bot/services/city_resolver.py",
+      "size": 7829,
+      "sha256": "290eb5e6646c325d4a58521ef88038bc234af152a5a0f0b9a339500cd774d433",
+      "mtime_utc": "2026-09-22T13:59:13+00:00"
+    },
+    {
+      "path": "bot/services/discovery_archive.py",
+      "size": 9858,
+      "sha256": "7781c6ff77404b32c85185f0ddf1510cdbd10abefcdd8db849dd7cf455a97309",
+      "mtime_utc": "2026-09-25T19:50:13+00:00"
+    },
+    {
+      "path": "bot/services/fast_browse.py",
+      "size": 3057,
+      "sha256": "b5accfd4dbd38b07dec90b03a2d9ba327f4b0c6527a1dfb83a2307bab7987bb8",
+      "mtime_utc": "2026-09-25T20:09:43+00:00"
+    },
+    {
+      "path": "bot/services/international_discovery.py",
+      "size": 7173,
+      "sha256": "3f5bb21bf88fa1de03b4b0bbc93140e0551a248998e428dcde59cfb4bd9e2cbf",
+      "mtime_utc": "2026-09-24T10:02:17+00:00"
+    },
+    {
+      "path": "bot/services/notifications.py",
+      "size": 2964,
+      "sha256": "b3af31f07840f4d70b26bd34c8a0fed174e3c7268420740cfafca5423b156eaa",
+      "mtime_utc": "2026-02-23T16:17:49+00:00"
+    },
+    {
+      "path": "bot/services/passenger_crypto.py",
+      "size": 9666,
+      "sha256": "1ebeba3dc9e67aa410183a2803368ca0a63d1de76ec2ed156a96c781363ecf76",
+      "mtime_utc": "2026-09-23T09:30:21+00:00"
+    },
+    {
+      "path": "bot/services/passenger_profile_store.py",
+      "size": 17070,
+      "sha256": "ec3bb5a509754fafc1f54dc39af090e200c4861017793e44cd61967338b9e862",
+      "mtime_utc": "2026-09-24T07:57:36+00:00"
+    },
+    {
+      "path": "bot/services/privacy.py",
+      "size": 446,
+      "sha256": "f22675debcf9b423cce461beaea27d2c35da9ea42380e03fab7ac864cfea88f4",
+      "mtime_utc": "2026-09-24T07:57:36+00:00"
+    },
+    {
+      "path": "bot/services/scheduler.py",
+      "size": 6355,
+      "sha256": "3f298fade8654b2f68d08572a12a0d13029639d08f7c4b20120f8bad8b558741",
+      "mtime_utc": "2026-05-29T08:31:10+00:00"
+    },
+    {
+      "path": "bot/services/telegram_web_auth.py",
+      "size": 1897,
+      "sha256": "ed4e5e94c75894bb2f8ef0090136131c35ed47161ec5b38a32e5489635e4c606",
+      "mtime_utc": "2026-09-22T18:13:16+00:00"
+    },
+    {
+      "path": "bot/services/tutu_mcp.py",
+      "size": 6984,
+      "sha256": "eae4c593ba80a2e9839ce90521f0846866cddb10973aa614c66b2868339849ff",
+      "mtime_utc": "2026-09-26T05:18:35+00:00"
+    },
+    {
+      "path": "bot/states/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mtime_utc": "2026-02-15T07:57:21+00:00"
+    },
+    {
+      "path": "bot/states/search.py",
+      "size": 544,
+      "sha256": "23e0084e4c9d4dcb18d9eb4233122bd36bf865f9ba1045032f8ac9e02c37e875",
+      "mtime_utc": "2026-09-25T19:53:18+00:00"
+    },
+    {
+      "path": "bot/static/passenger_profile.css",
+      "size": 2928,
+      "sha256": "0c1a2a448be79766ebd8235e222ddbd6413bd5514549d3b450bda48004f26e01",
+      "mtime_utc": "2026-09-22T18:13:16+00:00"
+    },
+    {
+      "path": "bot/static/passenger_profile.js",
+      "size": 8760,
+      "sha256": "0895374343330a1bc50c0d7929c7bc88da276d7289748597d7811d255c410f49",
+      "mtime_utc": "2026-09-24T07:57:36+00:00"
+    },
+    {
+      "path": "bot/static/telegram-web-app.js",
+      "size": 116510,
+      "sha256": "3549138a7934039fe7dfd1291a4ee739bd2b705a614308053a8b08a87d85c451",
+      "mtime_utc": "2026-09-23T03:11:06+00:00"
+    },
+    {
+      "path": "bot/templates/passenger_profile.html",
+      "size": 6180,
+      "sha256": "a945982406046607cbb492b59b3a8b0b6e3cbfbdcc8d6bfe6b731d630496dffe",
+      "mtime_utc": "2026-09-24T07:57:36+00:00"
+    },
+    {
+      "path": "bot/utils/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mtime_utc": "2026-02-15T07:57:23+00:00"
+    },
+    {
+      "path": "bot/utils/formatters.py",
+      "size": 6616,
+      "sha256": "ce27e97fee28f3ecf16c1225112de7cf42a1ddefcae3bec4cd5bae420aa087e8",
+      "mtime_utc": "2026-04-07T07:18:27+00:00"
+    },
+    {
+      "path": "bot/utils/parsers.py",
+      "size": 7596,
+      "sha256": "29ea5a6f97aca1fbd2e7be8b0583a176b605c84c277d86a641800ec9a3143e88",
+      "mtime_utc": "2026-04-07T07:18:25+00:00"
+    },
+    {
+      "path": "data/airlines.json",
+      "size": 160068,
+      "sha256": "6e2f6ccacbe0d1986f68cbf3458f97a010d7f06179447ddea20464b927621b92",
+      "mtime_utc": "2026-10-02T03:58:58+00:00"
+    },
+    {
+      "path": "data/cities.json",
+      "size": 4907377,
+      "sha256": "c23dbb02cf3cf39b6b01a2d2f137aa544548d40b315ab4e82e5e0e1376f3d39d",
+      "mtime_utc": "2026-10-02T03:58:57+00:00"
+    },
+    {
+      "path": "database/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mtime_utc": "2026-02-15T07:57:24+00:00"
+    },
+    {
+      "path": "database/crud.py",
+      "size": 26682,
+      "sha256": "9b9a080cb66d7883465134388e013ef0d1a28edfbca942ead08110f590de589e",
+      "mtime_utc": "2026-09-22T19:27:41+00:00"
+    },
+    {
+      "path": "database/database.py",
+      "size": 5018,
+      "sha256": "af9446dc1bda14e34ab2356d643b644dde9ac6e1cf1cf5e21115edb3daad6d2f",
+      "mtime_utc": "2026-09-24T07:57:36+00:00"
+    },
+    {
+      "path": "database/models.py",
+      "size": 10274,
+      "sha256": "e7499bfa478906c6bf824ac3a3fd752eed9b2b9044ef48390c14346890806fbe",
+      "mtime_utc": "2026-09-23T09:30:21+00:00"
+    },
+    {
+      "path": "flight_bot.service",
+      "size": 301,
+      "sha256": "704fe8dfcda1a3e00343ab67241f6713f2a78a70dc1e86e2b794f7459877ad32",
+      "mtime_utc": "2026-02-15T08:23:55+00:00"
+    },
+    {
+      "path": "main.py",
+      "size": 2182,
+      "sha256": "9b2fa089d3bbc25e425c652747ce3f1da0471a5645fad8f5329ead71547db805",
+      "mtime_utc": "2026-03-31T21:51:29+00:00"
+    },
+    {
+      "path": "requirements.txt",
+      "size": 215,
+      "sha256": "18bd738dc1db7b961fa99aaddeed9d9a8dfdff7578173c8456706fddac58d954",
+      "mtime_utc": "2026-09-22T19:27:41+00:00"
+    },
+    {
+      "path": "tests/test_aviasales_api.py",
+      "size": 3946,
+      "sha256": "bbb4f40a4aa3daf2ee200cd1ef3593301333186c9c897a3425b4b900906de148",
+      "mtime_utc": "2026-09-24T09:59:33+00:00"
+    },
+    {
+      "path": "tests/test_discovery.py",
+      "size": 12930,
+      "sha256": "022d3eb184c9d88792349f34d8c7603811d246a9a6dc130364c2681bae348b40",
+      "mtime_utc": "2026-09-24T14:10:23+00:00"
+    },
+    {
+      "path": "tests/test_discovery_archive.py",
+      "size": 2233,
+      "sha256": "c1acad6e511628775db566d82b9db61d150f2cdf6b6ea6bf057ac183219e24e7",
+      "mtime_utc": "2026-09-24T13:54:28+00:00"
+    },
+    {
+      "path": "tests/test_inline_formatters.py",
+      "size": 1343,
+      "sha256": "38226eaa75dd25bee5d4a77e91dffa706a160d4457ddf19f3d7338e144c38732",
+      "mtime_utc": "2026-04-07T07:18:29+00:00"
+    },
+    {
+      "path": "tests/test_inline_nodate_search.py",
+      "size": 4062,
+      "sha256": "577d70aa2b7371b2839ed11cc812bff259c33bad4368df022e96151985d7a303",
+      "mtime_utc": "2026-04-07T07:18:29+00:00"
+    },
+    {
+      "path": "tests/test_inline_parser_and_resolver.py",
+      "size": 3643,
+      "sha256": "99bb69bb2317eaf4d909098019204cabe376dc8188a6569612d9d427d17f128e",
+      "mtime_utc": "2026-04-07T07:18:28+00:00"
+    },
+    {
+      "path": "tests/test_international_discovery.py",
+      "size": 5079,
+      "sha256": "f683a052484773bf9cbe326c57658c382b46c389878f8f2dd59be71a073cbc64",
+      "mtime_utc": "2026-09-24T10:09:10+00:00"
+    },
+    {
+      "path": "tests/test_management_buttons.py",
+      "size": 3557,
+      "sha256": "fc60dfd350cafad8e0753bcb33aba439bd1dceb3070c1976c7432516ac2ce074",
+      "mtime_utc": "2026-04-07T07:18:30+00:00"
+    },
+    {
+      "path": "tests/test_passenger_profile.py",
+      "size": 6946,
+      "sha256": "cc169b00cc171cab01748c813a16faee657ead85ca482f135e010e301834319f",
+      "mtime_utc": "2026-09-24T05:54:38+00:00"
+    },
+    {
+      "path": "tests/test_profile_callback.py",
+      "size": 1711,
+      "sha256": "9bbe68aaf085c8205fd61325241fbf8127704b33761bd2cc9cf6b606175bd6b1",
+      "mtime_utc": "2026-09-24T06:04:47+00:00"
+    },
+    {
+      "path": "tests/test_profile_crypto_v3.py",
+      "size": 4438,
+      "sha256": "fe09d970ac70fc462892876151e326364c073abe6c39c69cdf055b03182a0eb6",
+      "mtime_utc": "2026-09-23T10:08:24+00:00"
+    },
+    {
+      "path": "tests/test_tutu_mcp.py",
+      "size": 3966,
+      "sha256": "18062ecca5ad261ef13aef04bae1c59b68f1818823aea871599f7d5756b55ff1",
+      "mtime_utc": "2026-09-22T08:31:32+00:00"
+    },
+    {
+      "path": "tests/test_web_security.py",
+      "size": 1387,
+      "sha256": "354ee1d05932eec484b9e634282171d87186cfa4366c32d0c1f5606b155500d0",
+      "mtime_utc": "2026-09-24T06:00:27+00:00"
+    }
+  ]
+}

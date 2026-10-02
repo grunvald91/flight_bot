@@ -324,7 +324,7 @@ async def log_request(telegram_id: int, username: str | None, first_name: str | 
             ))
             await session.commit()
     except Exception as e:
-        logger.error("Failed to log request: %s", e)
+        logger.error("Failed to log request; details suppressed")
 
 
 async def get_request_stats(days: int = 7, limit: int = 50) -> dict:

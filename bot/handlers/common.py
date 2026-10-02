@@ -4,8 +4,9 @@ import os
 from aiogram import Router, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
 
-from bot.keyboards.common_kb import main_menu_keyboard
+from bot.keyboards.common_kb import main_menu_keyboard, persistent_menu_keyboard
 from database.database import async_session_maker
 from database.models import User
 from sqlalchemy import select
@@ -23,6 +24,10 @@ WELCOME_TEXT = (
     "   <code>@{bot_username} Москва-Стамбул 15.03</code> — на дату\n"
     "   <code>@{bot_username} Москва</code> — дешёвые из города\n\n"
     "Выберите раздел ниже:\n"
+    "🟣 <b>Поиск на Туту</b> — актуальные рейсы, тарифы и багаж\n"
+    "⚡ <b>Быстрый обзор</b> — ориентировочные цены Aviasales; Туту по выбору\n"
+    "🌍 <b>Куда дешевле за границу</b> — направления на выбранную дату\n"
+    "👤 <b>Пассажир</b> — защищённый профиль для оформления\n"
     "⭐ <b>Избранное</b> — сохранённые маршруты\n"
     "🔔 <b>Слежение за ценой</b> — подписки на снижение цен\n"
     "📜 <b>История</b> — недавние поиски\n"
@@ -39,6 +44,10 @@ HELP_TEXT = (
     "   <code>@{bot_username} Москва</code> — дешёвые направления + избранное\n"
     "   <code>@{bot_username} избранные</code> — все избранные маршруты\n\n"
     "<b>Команды:</b>\n"
+    "/tutu — поиск актуальных авиабилетов через Туту\n"
+    "/discover — дешёвые международные направления на дату\n"
+    "/browse — быстрый обзор направлений и проверка выбранного\n"
+    "/profile — защищённый профиль пассажира\n"
     "/guide — полная инструкция по использованию\n"
     "/favorites — избранные маршруты\n"
     "/subscribe — слежение за ценой (подписки)\n"
@@ -50,13 +59,80 @@ HELP_TEXT = (
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, state: FSMContext):
+    await state.clear()
     await _ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
 
     bot_info = await message.bot.get_me()
     text = WELCOME_TEXT.format(bot_username=bot_info.username)
 
-    await message.answer(text, reply_markup=main_menu_keyboard(user_id=message.from_user.id))
+    await message.answer(text, reply_markup=persistent_menu_keyboard())
+
+
+@router.message(F.text.in_(("🏠 Главное меню", "🏠 Меню")))
+async def persistent_home(message: Message, state: FSMContext):
+    await state.clear()
+    bot_info = await message.bot.get_me()
+    await message.answer(
+        WELCOME_TEXT.format(bot_username=bot_info.username),
+        reply_markup=persistent_menu_keyboard(),
+    )
+
+
+@router.message(F.text == "🔍 Найти билеты")
+async def persistent_search(message: Message, state: FSMContext):
+    from bot.handlers.search import cmd_search
+    await cmd_search(message, state)
+
+
+@router.message(F.text == "🟣 Поиск на Туту")
+async def persistent_tutu(message: Message, state: FSMContext):
+    from bot.handlers.tutu import _start_tutu_search
+    await _start_tutu_search(message, state)
+
+
+@router.message(F.text.in_(("🌍 Куда дешевле за границу", "🌍 Глубокий")))
+async def persistent_discover(message: Message, state: FSMContext):
+    from bot.handlers.discover import _start_discovery
+    await _start_discovery(message, state)
+
+@router.message(F.text.in_(("⚡ Быстрый обзор направлений", "⚡ Быстрый")))
+async def persistent_browse(message: Message, state: FSMContext):
+    from bot.handlers.browse import _start_browse
+    await _start_browse(message, state)
+
+
+@router.message(F.text == "👤 Пассажир")
+async def persistent_passenger_profile(message: Message, state: FSMContext):
+    from bot.handlers.profile import _profile_message
+    await state.clear()
+    await _profile_message(message)
+
+
+@router.message(F.text == "⭐ Избранное")
+async def persistent_favorites(message: Message, state: FSMContext):
+    from bot.handlers.favorites import _send_favorites
+    await state.clear()
+    await _send_favorites(message.bot, message.from_user.id)
+
+
+@router.message(F.text == "🔔 Слежение")
+async def persistent_subscriptions(message: Message, state: FSMContext):
+    from bot.handlers.subscriptions import cmd_subscriptions
+    await cmd_subscriptions(message, state)
+
+
+@router.message(F.text == "📜 История")
+async def persistent_history(message: Message, state: FSMContext):
+    from bot.handlers.history import _show_history
+    await state.clear()
+    await _show_history(message)
+
+
+@router.message(F.text == "⚙️ Настройки")
+async def persistent_settings(message: Message, state: FSMContext):
+    from bot.handlers.settings import cmd_settings
+    await cmd_settings(message, state)
 
 
 @router.message(Command("help"))

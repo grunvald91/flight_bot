@@ -105,6 +105,76 @@ class AviasalesAPI:
             return data.get("data", [])
         return []
 
+    async def search_destinations_on_date(
+        self,
+        origin: str,
+        depart_date: str,
+        limit: int = 1000,
+    ) -> list[dict]:
+        """All reported candidate destinations for an exact date, page by page."""
+        if not 1 <= limit <= 1000:
+            raise ValueError("Aviasales page size must be between 1 and 1000")
+        params = {
+            "origin": origin,
+            "currency": "rub",
+            "sorting": "price",
+            "direct": "false",
+            "one_way": "true",
+            "unique": "true",
+            "limit": limit,
+            "departure_at": depart_date,
+            "token": self.token,
+        }
+        results = []
+        previous_full_page = None
+        seen_destinations = set()
+        page = 1
+        while True:
+            params["page"] = page
+            cache_key = f"destinations:{origin}:{depart_date}:{limit}:{page}"
+            data = await self._cached_request(
+                cache_key, "/aviasales/v3/prices_for_dates", params,
+            )
+            if not isinstance(data, dict) or data.get("success") is not True or not isinstance(data.get("data"), list):
+                raise RuntimeError(f"Incomplete destination discovery: page {page} failed")
+            currency = data.get("currency")
+            if currency is not None and str(currency).lower() != "rub":
+                raise RuntimeError(f"Incomplete destination discovery: page {page} currency mismatch")
+            rows = data["data"]
+            if len(rows) > limit:
+                raise RuntimeError(f"Incomplete destination discovery: page {page} exceeds requested size")
+            if rows and rows == previous_full_page:
+                raise RuntimeError(f"Incomplete destination discovery: repeated page {page}")
+            page_destinations = set()
+            for row in rows:
+                destination = row.get("destination") if isinstance(row, dict) else None
+                if not destination:
+                    raise RuntimeError(f"Incomplete destination discovery: invalid row on page {page}")
+                if destination in seen_destinations or destination in page_destinations:
+                    raise RuntimeError(f"Incomplete destination discovery: page {page} overlap")
+                page_destinations.add(destination)
+            seen_destinations.update(page_destinations)
+            results.extend(rows)
+            if not rows:
+                metadata = data.get("pagination") or data.get("meta") or {}
+                if not isinstance(metadata, dict):
+                    raise RuntimeError(f"Incomplete destination discovery: page {page} invalid metadata")
+                if any(item.get("has_more") is True or item.get("next_page") not in (None, False, 0, "")
+                       for item in (data, metadata)):
+                    raise RuntimeError(f"Incomplete destination discovery: page {page} indicates more rows")
+                for item in (data, metadata):
+                    for key in ("total", "total_count"):
+                        if key in item:
+                            try:
+                                total = int(item[key])
+                            except (TypeError, ValueError):
+                                raise RuntimeError(f"Incomplete destination discovery: page {page} invalid total")
+                            if total != len(results):
+                                raise RuntimeError(f"Incomplete destination discovery: page {page} total mismatch")
+                return results
+            previous_full_page = rows
+            page += 1
+
     async def get_cheapest_tickets(self, origin: str, destination: str | None = None) -> dict:
         """Самые дешёвые билеты по маршруту (данные за 48ч)."""
         params = {

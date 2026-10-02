@@ -17,6 +17,7 @@ from bot.utils.formatters import (
     format_date_full,
 )
 from bot.keyboards.common_kb import ticket_keyboard
+from bot.keyboards.calendar_kb import calendar_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -70,14 +71,24 @@ async def process_destination(message: Message, state: FSMContext):
     data = await state.get_data()
     await message.answer(
         f"Маршрут: <b>{data['origin_name']} -> {dest_name}</b>\n\n"
-        "Введите дату вылета (ДД.ММ):\n"
-        "Например: <code>15.03</code>\n\n"
-        "Или нажмите «Без даты» для поиска самых дешёвых:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Без даты — самые дешёвые", callback_data="search:nodate")],
-            [InlineKeyboardButton(text="Отмена", callback_data="search:cancel")],
-        ]),
+        "Выберите дату вылета в календаре. При желании дату можно ввести вручную:",
+        reply_markup=calendar_keyboard("search", include_no_date=True),
     )
+
+
+@router.callback_query(F.data.startswith("caldate:search:"))
+async def cb_search_calendar_date(callback: CallbackQuery, state: FSMContext):
+    date_str = (callback.data or "").split(":", 2)[2]
+    data = await state.get_data()
+    origin = data.get("origin")
+    destination = data.get("destination")
+    if not origin or not destination:
+        await callback.answer("Поиск устарел. Начните заново.", show_alert=True)
+        return
+    await state.clear()
+    await callback.message.edit_text(f"Выбрана дата: <b>{format_date_full(date_str)}</b>")
+    await callback.answer()
+    await _do_search(callback.message, origin, destination, date_str)
 
 
 @router.callback_query(F.data == "search:nodate")
