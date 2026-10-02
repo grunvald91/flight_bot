@@ -28,9 +28,8 @@ async def show_entry_rules(callback: CallbackQuery):
     except Exception as exc:
         logger.warning("KDMID entry lookup failed for %s: %s", country_code, exc)
         await callback.message.answer(
-            f"<b>ℹ️ Въезд в {html.escape(country_name)} для граждан РФ</b>\n\n"
-            "Сейчас не удалось получить официальный набор МИД. "
-            "Проверьте правила непосредственно на сайте Консульского департамента МИД РФ.",
+            f"<b>ℹ️ {html.escape(country_name)} — въезд для граждан РФ</b>\n\n"
+            "⚠️ Не удалось загрузить правила. Откройте официальный источник.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text="Официальный источник МИД РФ", url=KDMID_SOURCE_URL)
             ]]),
@@ -39,9 +38,8 @@ async def show_entry_rules(callback: CallbackQuery):
 
     if rule is None:
         await callback.message.answer(
-            f"<b>ℹ️ Въезд в {html.escape(country_name)} для граждан РФ</b>\n\n"
-            "В официальном наборе МИД не удалось однозначно найти эту страну. "
-            "Перед поездкой проверьте требования по ссылке ниже.",
+            f"<b>ℹ️ {html.escape(country_name)} — въезд для граждан РФ</b>\n\n"
+            "⚠️ Правила для этой страны не найдены автоматически.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text="Официальный источник МИД РФ", url=KDMID_SOURCE_URL)
             ]]),
@@ -121,7 +119,7 @@ def _simple_entry_lines(regime: str, details: str = "") -> list[str]:
             if value:
                 lines.append(f"🏠 <b>По прибытии:</b> {html.escape(value)}")
 
-    if len(lines) == 1 and raw:
+    if lines and lines[0].startswith("ℹ️") and raw:
         short = raw
         if len(short) > 220:
             short = short[:217].rstrip() + "…"
