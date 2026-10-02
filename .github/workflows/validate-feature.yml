@@ -28,4 +28,5 @@ jobs:
         env:
           DB_TYPE: sqlite
           DB_NAME: test_flight_bot
+          PYTHONPATH: .
         run: pytest -q
