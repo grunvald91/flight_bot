@@ -50,9 +50,9 @@ def main() -> int:
         raise RuntimeError(f"KDMID snapshot unexpectedly small: {len(rows)} rows")
 
     headers = [str(h or "").lower() for h in rows[0].keys()]
-    if not any("страна" in h for h in headers):
+    if "country" not in headers and not any("страна" in h for h in headers):
         raise RuntimeError("KDMID snapshot has no country column")
-    if not any("общеграждан" in h for h in headers):
+    if "citizen" not in headers and not any("общеграждан" in h for h in headers):
         raise RuntimeError("KDMID snapshot has no ordinary-passport column")
 
     TARGET.parent.mkdir(parents=True, exist_ok=True)
