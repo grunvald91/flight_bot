@@ -12,7 +12,7 @@ jobs:
   snapshot:
     runs-on: ubuntu-latest
     env:
-      SSH_HOST: 155.212.162.47
+      SSH_HOST: 188.120.254.223
       SSH_USER: root
       SSH_PASSWORD: ${{ secrets.FLIGHT_BOT_SSH_PASSWORD }}
       REMOTE_PATH: /opt/flight_bot
