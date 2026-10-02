@@ -116,3 +116,19 @@ async def test_kazakhstan_verified_override_does_not_depend_on_remote_dataset(mo
     assert "внутреннему российскому паспорту" in rule.details
     assert "3 рабочих дней" in rule.details
     assert "gov.kz" in rule.source_url
+
+
+def test_actual_kdmid_english_headers_parse():
+    raw = (
+        'country,diplomatic,service,citizen\n'
+        '"Казахстан","без визы","без визы","без визы"\n'
+        '"Турция","без визы","без визы","без визы до 30 дней"\n'
+    ).encode("utf-8")
+
+    text = entry_rules._decode_csv_bytes(raw)
+    rows = entry_rules._parse_csv(text)
+
+    assert rows == [
+        {"country": "Казахстан", "ordinary_passport": "без визы"},
+        {"country": "Турция", "ordinary_passport": "без визы до 30 дней"},
+    ]
