@@ -112,6 +112,22 @@ def _normalize(value: str) -> str:
     return " ".join(value.split())
 
 
+def _decode_csv_bytes(raw: bytes) -> str:
+    errors = []
+    for encoding in ("utf-8-sig", "cp1251"):
+        try:
+            text = raw.decode(encoding)
+        except UnicodeDecodeError as exc:
+            errors.append(exc)
+            continue
+        normalized = text.lower()
+        if "страна" in normalized and "общеграждан" in normalized:
+            return text
+    if errors:
+        raise errors[-1]
+    return raw.decode("utf-8-sig")
+
+
 def _parse_csv(text: str) -> list[dict]:
     sample = text[:8192]
     try:
@@ -172,7 +188,7 @@ def _load_bundled_rules() -> tuple[list[dict], datetime | None]:
         if not BUNDLED_DATA_PATH.exists():
             return [], None
         raw = BUNDLED_DATA_PATH.read_bytes()
-        text = raw.decode("utf-8-sig")
+        text = _decode_csv_bytes(raw)
         rules = _parse_csv(text)
         modified_at = datetime.fromtimestamp(
             BUNDLED_DATA_PATH.stat().st_mtime,
@@ -213,7 +229,7 @@ async def _download_rules() -> tuple[list[dict], datetime]:
         ) as response:
             response.raise_for_status()
             raw = await response.read()
-    text = raw.decode("utf-8-sig")
+    text = _decode_csv_bytes(raw)
     rules = _parse_csv(text)
     if not rules:
         raise ValueError("KDMID entry-rules dataset is empty")
