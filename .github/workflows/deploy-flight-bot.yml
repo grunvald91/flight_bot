@@ -1,0 +1,42 @@
+name: Deploy flight bot to 188
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deploy-flight-bot.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload changed files
+        uses: appleboy/scp-action@v1
+        with:
+          host: 188.120.254.223
+          username: root
+          password: ${{ secrets.FLIGHT_BOT_SSH_PASSWORD }}
+          source: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/services/scheduler.py,bot/services/channel_publisher.py"
+          target: "/opt/flight_bot"
+          overwrite: true
+
+      - name: Restart and verify
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 188.120.254.223
+          username: root
+          password: ${{ secrets.FLIGHT_BOT_SSH_PASSWORD }}
+          script_stop: true
+          script: |
+            cd /opt/flight_bot
+            venv/bin/python -m compileall -q bot database
+            systemctl restart flight-bot
+            sleep 3
+            systemctl is-active --quiet flight-bot
+            systemctl --no-pager --full status flight-bot | head -n 20
