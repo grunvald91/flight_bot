@@ -1,7 +1,7 @@
 from datetime import datetime, date
 from sqlalchemy import (
     BigInteger, String, Integer, Float, Boolean, DateTime, Date,
-    Text, JSON, LargeBinary, ForeignKey, UniqueConstraint, Index,
+    Text, JSON, LargeBinary, ForeignKey, UniqueConstraint, Index, false,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -113,7 +113,7 @@ class UserSettings(Base):
     direct_flights_only: Mapped[bool] = mapped_column(Boolean, default=False)
     # Последний выбор переключателя «Без пересадок» в поиске («Дешёвые на месяц» и «Дешёвые за границу»).
     # Отдельно от direct_flights_only, который относится к уведомлениям о ценах.
-    search_direct_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    search_direct_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Настройки уведомлений

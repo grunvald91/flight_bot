@@ -232,6 +232,7 @@ def persistent_menu_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="🔍 Найти билеты"), KeyboardButton(text="🟣 Билеты через Туту")],
             [KeyboardButton(text="🧭 Поездка целиком"), KeyboardButton(text="⚡ Дешёвые за границу")],
             [KeyboardButton(text="🌍 Подробный поиск"), KeyboardButton(text="🏠 Меню")],
+            [KeyboardButton(text="📅 Дешёвые на месяц")],
         ],
         resize_keyboard=True,
         is_persistent=True,

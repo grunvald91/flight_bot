@@ -30,7 +30,10 @@ router = Router()
 WINDOW_DAYS = 30
 PAGE_SIZE = 10  # размер страницы выдачи; все билеты доступны листанием
 
-_IATA_RE = re.compile(r"^[A-Z]{3}$")
+# Данные кнопок присылает клиент Telegram, поэтому разбираем их строго:
+# ровно три латинские буквы и номер страницы из ASCII-цифр (без «²», переводов строк и т. п.)
+_IATA_RE = re.compile(r"[A-Z]{3}")
+_PAGE_RE = re.compile(r"[0-9]{1,4}")
 
 
 # ── Вход и выбор направления ──
@@ -107,9 +110,9 @@ def _parse_callback(data: str) -> tuple[str, str, bool, int] | None:
     if len(parts) != 5 or parts[0] != "mo":
         return None
     _, origin, destination, direct, page = parts
-    if not _IATA_RE.match(origin) or not _IATA_RE.match(destination):
+    if not _IATA_RE.fullmatch(origin) or not _IATA_RE.fullmatch(destination):
         return None
-    if direct not in ("0", "1") or not page.isdigit():
+    if direct not in ("0", "1") or not _PAGE_RE.fullmatch(page):
         return None
     return origin, destination, direct == "1", int(page)
 
@@ -120,7 +123,7 @@ def _parse_toggle(data: str) -> tuple[str, str, bool] | None:
     if len(parts) != 4 or parts[0] != "mt":
         return None
     _, origin, destination, direct = parts
-    if not _IATA_RE.match(origin) or not _IATA_RE.match(destination) or direct not in ("0", "1"):
+    if not _IATA_RE.fullmatch(origin) or not _IATA_RE.fullmatch(destination) or direct not in ("0", "1"):
         return None
     return origin, destination, direct == "1"
 

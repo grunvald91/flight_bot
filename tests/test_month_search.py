@@ -241,6 +241,9 @@ async def test_all_callback_data_fit_telegram_limit(monkeypatch):
         ("mo:AERO:LED:1:0", None),
         ("mo:AER:LED:1", None),
         ("mo:AER:LED:1:0:9", None),
+        ("mo:AER:LED:1:²", None),          # не-ASCII цифра раньше роняла обработчик
+        ("mo:AER\n:LED:1:0", None),
+        ("mo:AER:LED:1:99999", None),
         ("xx:AER:LED:1:0", None),
         ("", None),
     ],

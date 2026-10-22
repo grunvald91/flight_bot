@@ -96,7 +96,7 @@ def test_filtered_buttons_point_to_the_original_destinations():
     keyboard = browse._page_keyboard("abc", payload, 0, True)
 
     callbacks = _callbacks(keyboard)
-    assert [c for c in callbacks if c.startswith("brsel:")] == ["brsel:abc:0", "brsel:abc:2", "brsel:abc:4"]
+    assert [c for c in callbacks if c.startswith("brsel:")] == ["brsel:abc:0:1", "brsel:abc:2:1", "brsel:abc:4:1"]
     labels = [b.text for b in _buttons(keyboard) if (b.callback_data or "").startswith("brsel:")]
     assert labels == ["1. Город0", "2. Город2", "3. Город4"]
     toggle = _buttons(keyboard)[0]
@@ -123,8 +123,8 @@ def test_paging_is_computed_over_the_filtered_list():
     first = browse._page_keyboard("abc", payload, 0, True)
     last = browse._page_keyboard("abc", payload, 2, True)
 
-    assert "brpage:abc:1" in _callbacks(first) and "brpage:abc:-1" not in _callbacks(first)
-    assert "brpage:abc:1" in _callbacks(last) and "brpage:abc:3" not in _callbacks(last)
+    assert "brpage:abc:1:1" in _callbacks(first) and not any(c.startswith("brpage:abc:-") for c in _callbacks(first))
+    assert "brpage:abc:1:1" in _callbacks(last) and "brpage:abc:3:1" not in _callbacks(last)
     assert any(b.text == "3/3" for b in _buttons(last))
     assert _ranks(browse._format_page(payload, 2, True)) == list(range(21, 31))
 
@@ -286,7 +286,7 @@ async def test_paging_follows_the_saved_choice(monkeypatch, prefs):
     _use_archive(monkeypatch, options)
     prefs.data[42] = True
 
-    callback = _FakeCallback("brpage:abc:1")
+    callback = _FakeCallback("brpage:abc:1")  # кнопка из старого сообщения, без флага
     await browse.browse_page(callback)
 
     assert _ranks(callback.message.edits[0][0]) == list(range(11, 21))
@@ -298,7 +298,7 @@ async def test_paging_past_the_end_of_the_filtered_list_is_rejected(monkeypatch,
     _use_archive(monkeypatch, options)
     prefs.data[42] = True
 
-    callback = _FakeCallback("brpage:abc:3")  # в фильтре страниц только 3 (0..2)
+    callback = _FakeCallback("brpage:abc:3:1")  # в фильтре страниц только 3 (0..2)
     await browse.browse_page(callback)
 
     assert callback.alerts and callback.message.edits == []
@@ -310,11 +310,12 @@ async def test_card_back_button_follows_the_filter(monkeypatch, prefs):
     _use_archive(monkeypatch, options)
     prefs.data[42] = True
 
-    callback = _FakeCallback("brsel:abc:24")
+    callback = _FakeCallback("brsel:abc:24:1")
     await browse.browse_select(callback)
 
-    _, kwargs = callback.message.edits[0]
-    assert "brpage:abc:1" in _callbacks(kwargs["reply_markup"])
+    text, kwargs = callback.message.edits[0]
+    assert "brpage:abc:1:1" in _callbacks(kwargs["reply_markup"])
+    assert "Направление 13 из 30" in text  # номер как в отфильтрованном списке
 
 
 @pytest.mark.asyncio
@@ -336,3 +337,75 @@ async def test_new_search_starts_with_the_saved_choice(monkeypatch, prefs):
     assert _buttons(kwargs["reply_markup"])[0].callback_data == "brdirect:" + next(iter(archive.saved)) + ":0"
     # В архив уходит полный список: фильтр только скрывает варианты, не удаляет их
     assert len(next(iter(archive.saved.values()))["options"]) == 6
+
+
+# ── Состояние фильтра живёт в кнопке ──
+
+@pytest.mark.asyncio
+async def test_page_button_uses_its_own_filter_not_the_saved_choice(monkeypatch, prefs):
+    """Фильтр переключили в другом поиске, а старый список листают: страницы не должны «съезжать»."""
+    options = [_option(i, 0 if i % 2 == 0 else 1) for i in range(60)]
+    _use_archive(monkeypatch, options)
+    prefs.data[42] = True  # сохранённый выбор уже другой
+
+    callback = _FakeCallback("brpage:abc:4:0")  # кнопка из списка без фильтра (страниц 6)
+    await browse.browse_page(callback)
+
+    assert callback.alerts == []
+    assert _ranks(callback.message.edits[0][0]) == list(range(41, 51))
+
+
+@pytest.mark.asyncio
+async def test_card_opened_from_full_list_returns_to_full_list(monkeypatch, prefs):
+    options = [_option(i, 0 if i % 2 == 0 else 1) for i in range(60)]
+    _use_archive(monkeypatch, options)
+    prefs.data[42] = True
+
+    callback = _FakeCallback("brsel:abc:25:0")
+    await browse.browse_select(callback)
+
+    text, kwargs = callback.message.edits[0]
+    assert "brpage:abc:2:0" in _callbacks(kwargs["reply_markup"])
+    assert "Направление 26 из 60" in text
+
+
+@pytest.mark.asyncio
+async def test_old_card_buttons_without_flag_still_work(monkeypatch, prefs):
+    _use_archive(monkeypatch, _mixed())
+
+    callback = _FakeCallback("brsel:abc:3")
+    await browse.browse_select(callback)
+
+    assert callback.alerts == [] and callback.message.edits
+
+
+@pytest.mark.parametrize(
+    "data, prefix, expected",
+    [
+        ("brpage:abc:2:1", "brpage", ("abc", 2, True)),
+        ("brpage:abc:2:0", "brpage", ("abc", 2, False)),
+        ("brpage:abc:2", "brpage", ("abc", 2, None)),
+        ("brsel:k_-9:15", "brsel", ("k_-9", 15, None)),
+        ("brpage:abc:-1", "brpage", None),
+        ("brpage:abc:²", "brpage", None),
+        ("brpage:abc:2:7", "brpage", None),
+        ("brpage:abc:2\n", "brpage", None),
+        ("brpage:a:b:2", "brpage", None),
+        ("brsel:abc:2:1", "brpage", None),
+        ("", "brpage", None),
+    ],
+)
+def test_parse_button(data, prefix, expected):
+    assert browse._parse_button(data, prefix) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data", ["brpage:abc:x", "brpage:abc:²", "brsel:abc:-1", "brtutu:abc:1:5"])
+async def test_forged_list_buttons_are_rejected(monkeypatch, prefs, data):
+    _use_archive(monkeypatch, _mixed())
+    callback = _FakeCallback(data)
+
+    handler = {"brpage": browse.browse_page, "brsel": browse.browse_select, "brtutu": browse.browse_tutu}[data.split(":")[0]]
+    await handler(callback)
+
+    assert callback.alerts and callback.message.edits == []

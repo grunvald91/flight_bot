@@ -27,6 +27,8 @@ WELCOME_TEXT = (
     "и какие документы нужны.\n\n"
     "🌍 <b>Подробный поиск</b> — если хотите, чтобы бот дольше проверил найденные "
     "зарубежные направления и показал конкретные подтверждённые варианты.\n\n"
+    "📅 <b>Дешёвые на месяц</b> — выберите откуда и куда, бот покажет все билеты на ближайший "
+    "месяц от дешёвых к дорогим. Можно оставить только рейсы без пересадок.\n\n"
     "🟣 <b>Билеты через Туту</b> — если уже знаете, откуда, куда и когда хотите лететь.\n\n"
     "🧭 <b>Поездка целиком</b> — сравнить самолёт, поезд и автобус, подобрать отель "
     "и примерно посчитать стоимость всей поездки.\n\n"
@@ -107,6 +109,12 @@ async def persistent_discover(message: Message, state: FSMContext):
 async def persistent_browse(message: Message, state: FSMContext):
     from bot.handlers.browse import _start_browse
     await _start_browse(message, state)
+
+
+@router.message(F.text == "📅 Дешёвые на месяц")
+async def persistent_month(message: Message, state: FSMContext):
+    from bot.handlers.month import _start as _start_month
+    await _start_month(message, state)
 
 
 @router.message(F.text == "👤 Пассажир")

@@ -1,6 +1,7 @@
 """Fast indicative Aviasales browsing; verification is requested per destination."""
 import html
 import logging
+import re
 import secrets
 from datetime import date, datetime
 
@@ -199,7 +200,7 @@ def _page_keyboard(key: str, payload: dict, page: int, direct_only: bool = False
         row = [
             InlineKeyboardButton(
                 text=f"{rank}. {city}",
-                callback_data=f"brsel:{key}:{index}",
+                callback_data=f"brsel:{key}:{index}:{int(direct_only)}",
             )
         ]
         country_code = str(option.get("country_code") or "").upper()
@@ -214,10 +215,10 @@ def _page_keyboard(key: str, payload: dict, page: int, direct_only: bool = False
 
     nav = []
     if page:
-        nav.append(InlineKeyboardButton(text="◀️", callback_data=f"brpage:{key}:{page - 1}"))
+        nav.append(InlineKeyboardButton(text="◀️", callback_data=f"brpage:{key}:{page - 1}:{int(direct_only)}"))
     nav.append(InlineKeyboardButton(text=f"{page + 1}/{_total_pages(len(view))}", callback_data="calnoop"))
     if (page + 1) * PAGE_SIZE < len(view):
-        nav.append(InlineKeyboardButton(text="▶️", callback_data=f"brpage:{key}:{page + 1}"))
+        nav.append(InlineKeyboardButton(text="▶️", callback_data=f"brpage:{key}:{page + 1}:{int(direct_only)}"))
     rows.append(nav)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -237,20 +238,36 @@ async def _payload(callback: CallbackQuery, key: str) -> dict | None:
     return payload
 
 
+_BUTTON_RE = re.compile(r"(brpage|brsel|brtutu):([A-Za-z0-9_-]{1,40}):([0-9]{1,5})(?::([01]))?")
+
+
+def _parse_button(data: str | None, prefix: str) -> tuple[str, int, bool | None] | None:
+    """Кнопка списка: (ключ, номер, фильтр «Без пересадок» или None у кнопок из старых сообщений)."""
+    match = _BUTTON_RE.fullmatch(data or "")
+    if not match or match.group(1) != prefix:
+        return None
+    flag = match.group(4)
+    return match.group(2), int(match.group(3)), (None if flag is None else flag == "1")
+
+
+async def _direct_only_for(callback: CallbackQuery, flag: bool | None) -> bool:
+    """Состояние фильтра берётся из самой кнопки; у старых кнопок — последний выбор пользователя."""
+    return flag if flag is not None else await load_direct_only(callback.from_user.id)
+
+
 @router.callback_query(F.data.startswith("brpage:"))
 async def browse_page(callback: CallbackQuery):
-    try:
-        _, key, raw_page = (callback.data or "").split(":", 2)
-        page = int(raw_page)
-    except (TypeError, ValueError):
+    parsed = _parse_button(callback.data, "brpage")
+    if parsed is None:
         await callback.answer("Некорректная страница", show_alert=True)
         return
+    key, page, flag = parsed
     payload = await _payload(callback, key)
     if payload is None:
         return
-    direct_only = await load_direct_only(callback.from_user.id)
+    direct_only = await _direct_only_for(callback, flag)
     view = visible_options(payload["options"], direct_only)
-    if page < 0 or (page > 0 and not page_options(view, page)):
+    if page > 0 and not page_options(view, page):
         await callback.answer("Такой страницы нет.", show_alert=True)
         return
     await callback.message.edit_text(
@@ -262,14 +279,11 @@ async def browse_page(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("brdirect:"))
 async def browse_direct_toggle(callback: CallbackQuery):
-    try:
-        _, key, raw_value = (callback.data or "").split(":", 2)
-    except ValueError:
+    match = re.fullmatch(r"brdirect:([A-Za-z0-9_-]{1,40}):([01])", callback.data or "")
+    if not match:
         await callback.answer("Некорректная кнопка", show_alert=True)
         return
-    if raw_value not in ("0", "1"):
-        await callback.answer("Некорректная кнопка", show_alert=True)
-        return
+    key, raw_value = match.groups()
     payload = await _payload(callback, key)
     if payload is None:
         return
@@ -288,7 +302,8 @@ async def browse_direct_toggle(callback: CallbackQuery):
 
 
 def _selected_keyboard(
-    key: str, index: int, option: dict, departure_date: str, back_page: int | None = None,
+    key: str, index: int, option: dict, departure_date: str,
+    back_page: int | None = None, direct_only: bool | None = None,
 ) -> InlineKeyboardMarkup:
     url = aviasales_api.build_search_link(option["origin"], option["destination"], departure_date)
     rows = [
@@ -305,9 +320,8 @@ def _selected_keyboard(
         ])
     if back_page is None:
         back_page = index // PAGE_SIZE
-    rows.append([
-        InlineKeyboardButton(text="⬅️ К списку", callback_data=f"brpage:{key}:{back_page}")
-    ])
+    back = f"brpage:{key}:{back_page}" + ("" if direct_only is None else f":{int(direct_only)}")
+    rows.append([InlineKeyboardButton(text="⬅️ К списку", callback_data=back)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -322,10 +336,16 @@ async def browse_select(callback: CallbackQuery):
     selected = await _selected(callback)
     if selected is None:
         return
-    key, index, payload, option = selected
+    key, index, payload, option, flag = selected
+    direct_only = await _direct_only_for(callback, flag)
+    positions = [i for i, _ in visible_options(payload["options"], direct_only)]
+    if index in positions:  # номер и общее число — как в списке, из которого открыли
+        number, total = positions.index(index) + 1, len(positions)
+    else:
+        number, total = index + 1, len(payload["options"])
     departure_at = option.get("departure_at") or (payload["meta"]["departure_date"])
     lines = [
-        f"<b>⚡ Направление {index + 1} из {len(payload['options'])}</b>",
+        f"<b>⚡ Направление {number} из {total}</b>",
         f"{html.escape(str(option['country']))} — {html.escape(str(option['city']))} "
         f"({html.escape(str(option['destination']))})",
         f"Ориентировочная цена Aviasales: <b>≈{_money(option['price'])} ₽</b>",
@@ -340,32 +360,32 @@ async def browse_select(callback: CallbackQuery):
         lines.append(f"В пути: {option['duration']} мин")
     lines.append("\n⚠️ Цена и рейс из Aviasales не гарантируют наличия у Туту. "
                  "Проверьте выбранное направление отдельно у нужного провайдера.")
-    direct_only = await load_direct_only(callback.from_user.id)
     await callback.message.edit_text(
         "\n".join(lines), disable_web_page_preview=True,
         reply_markup=_selected_keyboard(
             key, index, option, payload["meta"]["departure_date"],
             back_page=_back_page(payload["options"], index, direct_only),
+            direct_only=direct_only,
         ),
     )
     await callback.answer()
 
 
 async def _selected(callback: CallbackQuery):
-    try:
-        _, key, raw_index = (callback.data or "").split(":", 2)
-        index = int(raw_index)
-    except (TypeError, ValueError):
+    prefix = (callback.data or "").split(":", 1)[0]
+    parsed = _parse_button(callback.data, prefix) if prefix in ("brsel", "brtutu") else None
+    if parsed is None:
         await callback.answer("Некорректное направление", show_alert=True)
         return None
+    key, index, flag = parsed
     payload = await _payload(callback, key)
     if payload is None:
         return None
     options = payload["options"]
-    if index < 0 or index >= len(options):
+    if index >= len(options):
         await callback.answer("Такого направления нет", show_alert=True)
         return None
-    return key, index, payload, options[index]
+    return key, index, payload, options[index], flag
 
 
 @router.callback_query(F.data.startswith("brtutu:"))
@@ -373,7 +393,7 @@ async def browse_tutu(callback: CallbackQuery):
     selected = await _selected(callback)
     if selected is None:
         return
-    _, _, payload, option = selected
+    _, _, payload, option, _ = selected
     await callback.answer("Проверяю направление через Туту…")
     origin_name = city_resolver.get_city_name(option["origin"])
     await _run_tutu_search(

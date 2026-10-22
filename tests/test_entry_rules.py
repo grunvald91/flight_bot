@@ -99,8 +99,8 @@ def test_fast_browse_list_shows_entry_button_for_each_destination():
 
     assert "entry:TR" in callbacks
     assert "entry:AM" in callbacks
-    assert "brsel:abc:0" in callbacks
-    assert "brsel:abc:1" in callbacks
+    assert "brsel:abc:0:0" in callbacks
+    assert "brsel:abc:1:0" in callbacks
 
 
 @pytest.mark.asyncio
