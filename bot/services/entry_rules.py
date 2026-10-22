@@ -71,9 +71,123 @@ class EntryRule:
     extra_source_url: str | None = None
     stale: bool = False
     updated_at: str | None = None
+    # Заполняется только у вручную проверенных стран: готовая строка про срок
+    # и итоговый вердикт, чтобы не зависеть от разбора текста открытой базы.
+    stay: str = ""
+    verdict: str = ""
+    verified: bool = False
 
 
 VERIFIED_COUNTRY_RULES: dict[str, EntryRule] = {
+    "TR": EntryRule(
+        country="Турция",
+        ordinary_passport=(
+            "Виза не нужна. До 60 дней за одну поездку; всего не более 90 дней "
+            "в течение 180 дней."
+        ),
+        stay=(
+            "до 60 дней подряд, всего до 90 дней в течение 180 дней. "
+            "Чтобы использовать остаток, нужно выехать из страны и въехать снова"
+        ),
+        details=(
+            "Документы: загранпаспорт, действителен не менее 120 дней с даты "
+            "въезда (рекомендуют 6 месяцев).\n"
+            "Важно: за превышение срока штраф и возможный запрет на въезд."
+        ),
+        source_url="https://www.mfa.gov.tr/consular-info.ru.mfa",
+        extra_source_url="https://t-j.ru/turkey-entry-rules/",
+        updated_at="2026-10-23",
+        verified=True,
+    ),
+    "TH": EntryRule(
+        country="Таиланд",
+        ordinary_passport="Виза не нужна. До 30 дней (с 15 сентября 2026 года, раньше было 60).",
+        stay=(
+            "до 30 дней; можно продлить ещё на 30 дней в иммиграционной "
+            "службе Таиланда"
+        ),
+        details=(
+            "Документы: загранпаспорт, действителен не менее 6 месяцев; "
+            "электронная карта прибытия TDAC, заполняется онлайн до вылета."
+        ),
+        source_url="https://tdac.immigration.go.th/",
+        extra_source_url="https://zona.media/news/2026/08/31/thai",
+        updated_at="2026-10-23",
+        verified=True,
+    ),
+    "AE": EntryRule(
+        country="ОАЭ",
+        ordinary_passport="Виза не нужна. До 90 дней в течение 180 дней.",
+        stay="до 90 дней в течение 180 дней",
+        details=(
+            "Документы: загранпаспорт, действителен не менее 6 месяцев с даты "
+            "въезда. У каждого ребёнка должен быть свой загранпаспорт."
+        ),
+        source_url="https://icp.gov.ae/",
+        extra_source_url="https://t-j.ru/uae-entry-rules/",
+        updated_at="2026-10-23",
+        verified=True,
+    ),
+    "EG": EntryRule(
+        country="Египет",
+        ordinary_passport="Виза оформляется по прибытии (платная) или онлайн как электронная виза.",
+        verdict="🟡 <b>Нужна виза: по прибытии или электронная</b>",
+        stay=(
+            "до 30 дней. На курортах Синая (Шарм-эль-Шейх, Таба) можно без визы "
+            "до 15 дней, но нельзя выезжать за пределы Синая"
+        ),
+        details=(
+            "Документы: загранпаспорт, действителен не менее 6 месяцев; "
+            "миграционная карта.\n"
+            "Важно: визу по прибытии оплачивают наличными долларами до паспортного "
+            "контроля; электронная виза оформляется на visa2egypt.gov.eg."
+        ),
+        source_url="https://visa2egypt.gov.eg/",
+        extra_source_url="https://otello.ru/nomer/pravila-vuezda-v-egipet",
+        updated_at="2026-10-23",
+        verified=True,
+    ),
+    "ME": EntryRule(
+        country="Черногория",
+        ordinary_passport=(
+            "Безвиз для россиян действует до 31 октября 2026 года включительно. "
+            "С 1 ноября 2026 года нужна виза."
+        ),
+        verdict="🔴 <b>С 1 ноября 2026 года нужна виза</b>",
+        stay="до 31 октября 2026 года можно без визы (до 30 дней)",
+        details=(
+            "Важно: при поездке после 31 октября 2026 года визу нужно "
+            "оформить заранее."
+        ),
+        extra_source_url="https://www.kommersant.ru/doc/8845057",
+        updated_at="2026-10-23",
+        verified=True,
+    ),
+    "VN": EntryRule(
+        country="Вьетнам",
+        ordinary_passport="Виза не нужна. До 45 дней.",
+        stay="до 45 дней; на больший срок можно оформить электронную визу (до 90 дней)",
+        details=(
+            "Документы: загранпаспорт, действителен не менее 6 месяцев; "
+            "на границе могут попросить обратный билет и бронь жилья."
+        ),
+        source_url="https://evisa.immigration.gov.vn/",
+        extra_source_url="https://t-j.ru/vietnam-entry-rules/",
+        updated_at="2026-10-23",
+        verified=True,
+    ),
+    "CN": EntryRule(
+        country="Китай",
+        ordinary_passport="Виза не нужна. До 30 дней (безвиз продлён до 31 декабря 2027 года).",
+        stay="до 30 дней; безвизовый режим действует до 31 декабря 2027 года",
+        details=(
+            "Документы: загранпаспорт. Безвиз для туризма, деловых поездок, "
+            "визита к родным и транзита."
+        ),
+        extra_source_url="https://meduza.io/news/2026/05/20/kitay-prodlil-bezvizovyy-rezhim-dlya-rossiyan-do-kontsa-2027-goda",
+        updated_at="2026-10-23",
+        verified=True,
+    ),
     "KZ": EntryRule(
         country="Казахстан",
         ordinary_passport=(
@@ -92,6 +206,7 @@ VERIFIED_COUNTRY_RULES: dict[str, EntryRule] = {
             "https://www.gov.kz/situations/497/1149?hl=ru-RU&lang=ru"
         ),
         updated_at="2026-10-02",
+        verified=True,
     ),
 }
 

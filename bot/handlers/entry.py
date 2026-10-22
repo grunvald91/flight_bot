@@ -49,12 +49,25 @@ async def show_entry_rules(callback: CallbackQuery):
     lines = [
         f"<b>ℹ️ {html.escape(rule.country)} — виза и документы для граждан РФ</b>",
         "",
-        *_simple_entry_lines(rule.ordinary_passport, rule.details),
+        *_simple_entry_lines(
+            rule.ordinary_passport,
+            rule.details,
+            stay=rule.stay,
+            verdict=rule.verdict,
+        ),
     ]
 
     checked = _format_checked_at(rule.updated_at)
-    if checked:
-        lines.extend(["", f"<i>Проверено: {checked}</i>"])
+    if rule.verified:
+        if checked:
+            lines.extend(["", f"<i>Правила сверены с источниками: {checked}</i>"])
+    else:
+        if checked:
+            lines.extend(["", f"<i>Данные открытой базы МИД РФ, загружены {checked}</i>"])
+        lines.append(
+            "<i>⚠️ База МИД может отставать от свежих изменений. "
+            "Перед покупкой билета сверьтесь по официальной ссылке.</i>"
+        )
     if rule.stale:
         lines.append("<i>⚠️ Используется сохранённая копия официальных данных.</i>")
 
@@ -64,6 +77,10 @@ async def show_entry_rules(callback: CallbackQuery):
             url=rule.source_url or KDMID_SOURCE_URL,
         )
     ]]
+    if rule.extra_source_url:
+        buttons.append([
+            InlineKeyboardButton(text="Подробнее", url=rule.extra_source_url)
+        ])
 
     await callback.message.answer(
         "\n".join(lines),
@@ -72,12 +89,64 @@ async def show_entry_rules(callback: CallbackQuery):
     )
 
 
-def _simple_entry_lines(regime: str, details: str = "") -> list[str]:
+_WINDOW_RE = re.compile(
+    r"(?:в течение|за|в|каждые|любые|любых|каждом|каждого)\s+180"
+    r"|180[\s-]*дневн|период\w*\s+(?:в\s+)?180"
+)
+
+
+def _stay_line(low: str) -> str | None:
+    """Срок пребывания из текста открытой базы МИД.
+
+    Если в тексте есть окно в 180 дней и два срока («до 60 дней, не более 90
+    дней в течение 180»), показываем оба, а не только первое число.
+    """
+    if _WINDOW_RE.search(low):
+        numbers = [
+            int(n)
+            for n in re.findall(r"(\d{1,3})\s*(?:дн|сут)", low)
+            if int(n) != 180
+        ]
+        if numbers:
+            total = max(numbers)
+            single = min(numbers)
+            if single < total:
+                return (
+                    f"до {single} дней за одну поездку, всего до {total} дней "
+                    "в течение 180 дней"
+                )
+            return f"до {total} дней в течение 180 дней"
+
+    stay = re.search(
+        r"(?:до|не более|срок(?:ом)? до)\s*(\d{1,3})\s*(?:дн\w*|сут\w*)",
+        low,
+    )
+    if stay:
+        return f"до {stay.group(1)} дней"
+
+    long_stay = re.search(
+        r"(?:до|не более|срок(?:ом)? до)\s*(\d{1,2})\s*(мес\w*|год\w*|лет)",
+        low,
+    )
+    if long_stay:
+        return f"до {long_stay.group(1)} {long_stay.group(2)}"
+    return None
+
+
+def _simple_entry_lines(
+    regime: str,
+    details: str = "",
+    *,
+    stay: str = "",
+    verdict: str = "",
+) -> list[str]:
     raw = " ".join((regime or "").split())
     low = raw.lower().replace("ё", "е")
     lines: list[str] = []
 
-    if "без виз" in low or "виза не нуж" in low or "виза не треб" in low:
+    if verdict:
+        lines.append(verdict)
+    elif "без виз" in low or "виза не нуж" in low or "виза не треб" in low:
         lines.append("✅ <b>Виза не нужна</b>")
     elif "электрон" in low and "виз" in low:
         lines.append("🟡 <b>Нужна электронная виза</b>")
@@ -88,21 +157,13 @@ def _simple_entry_lines(regime: str, details: str = "") -> list[str]:
     else:
         lines.append("ℹ️ <b>Есть специальные условия въезда</b>")
 
-    limit_180 = re.search(
-        r"(\d{1,3})\s*(?:дн\w*)[^.]{0,50}?(?:180|ста восьмидесят)",
-        low,
-    )
-    stay = re.search(
-        r"(?:до|не более|срок(?:ом)? до)\s*(\d{1,3})\s*(?:дн\w*|сут\w*)",
-        low,
-    )
-
-    if limit_180:
-        days = limit_180.group(1)
-        lines.append(f"🕒 <b>Срок:</b> до {days} дней в течение 180 дней")
-    elif stay:
-        days = stay.group(1)
-        lines.append(f"🕒 <b>Срок:</b> до {days} дней")
+    stay_text = (stay or "").strip()
+    if stay_text:
+        lines.append(f"🕒 <b>Срок:</b> {html.escape(stay_text)}")
+    else:
+        parsed = _stay_line(low)
+        if parsed:
+            lines.append(f"🕒 <b>Срок:</b> {parsed}")
 
     detail_text = (details or "").strip()
     for part in detail_text.splitlines():
@@ -118,6 +179,10 @@ def _simple_entry_lines(regime: str, details: str = "") -> list[str]:
             value = clean.split(":", 1)[1].strip()
             if value:
                 lines.append(f"🏠 <b>По прибытии:</b> {html.escape(value)}")
+        elif low_part.startswith("важно:"):
+            value = clean.split(":", 1)[1].strip()
+            if value:
+                lines.append(f"⚠️ <b>Важно:</b> {html.escape(value)}")
 
     if lines and lines[0].startswith("ℹ️") and raw:
         short = raw

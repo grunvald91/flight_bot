@@ -211,3 +211,108 @@ def test_kazakhstan_card_is_short_and_practical():
     assert "внутренний российский паспорт" in text
     assert "3 рабочих дней" in text
     assert "РВП" not in text
+
+
+@pytest.mark.asyncio
+async def test_turkey_shows_60_days_per_stay_and_90_in_180(monkeypatch):
+    async def fail_get_rules():
+        raise AssertionError("verified country must not use the remote dataset")
+
+    monkeypatch.setattr(entry_rules, "get_rules", fail_get_rules)
+    rule = await entry_rules.find_entry_rule("Турция", "TR")
+    text = "\n".join(
+        entry._simple_entry_lines(
+            rule.ordinary_passport, rule.details, stay=rule.stay, verdict=rule.verdict
+        )
+    )
+
+    assert "Виза не нужна" in text
+    assert "до 60 дней подряд" in text
+    assert "90 дней в течение 180 дней" in text
+    assert "120 дней" in text
+
+
+@pytest.mark.asyncio
+async def test_thailand_is_30_days_after_september_2026(monkeypatch):
+    async def fail_get_rules():
+        raise AssertionError("verified country must not use the remote dataset")
+
+    monkeypatch.setattr(entry_rules, "get_rules", fail_get_rules)
+    rule = await entry_rules.find_entry_rule("Таиланд", "TH")
+    text = "\n".join(
+        entry._simple_entry_lines(
+            rule.ordinary_passport, rule.details, stay=rule.stay, verdict=rule.verdict
+        )
+    )
+
+    assert "до 30 дней" in text
+    assert "до 60 дней" not in text
+    assert "TDAC" in text
+
+
+@pytest.mark.asyncio
+async def test_montenegro_card_does_not_claim_visa_free(monkeypatch):
+    async def fail_get_rules():
+        raise AssertionError("verified country must not use the remote dataset")
+
+    monkeypatch.setattr(entry_rules, "get_rules", fail_get_rules)
+    rule = await entry_rules.find_entry_rule("Черногория", "ME")
+    text = "\n".join(
+        entry._simple_entry_lines(
+            rule.ordinary_passport, rule.details, stay=rule.stay, verdict=rule.verdict
+        )
+    )
+
+    assert "1 ноября 2026" in text
+    assert "✅" not in text
+
+
+def test_dataset_text_with_two_terms_shows_both_numbers():
+    text = "\n".join(
+        entry._simple_entry_lines(
+            "без визы до 60 дней, не более 90 дней в течение 180 дней"
+        )
+    )
+
+    assert "до 60 дней за одну поездку" in text
+    assert "всего до 90 дней в течение 180 дней" in text
+
+
+def test_dataset_text_with_single_term_and_window():
+    text = "\n".join(
+        entry._simple_entry_lines("без визы до 90 дней в течение 180 дней")
+    )
+
+    assert "до 90 дней в течение 180 дней" in text
+    assert "за одну поездку" not in text
+
+
+def test_dataset_text_180_days_stay_is_not_a_window():
+    text = "\n".join(entry._simple_entry_lines("без визы до 180 дней"))
+
+    assert "до 180 дней" in text
+    assert "в течение 180" not in text
+
+
+def test_every_verified_country_has_stay_and_date():
+    for code, rule in entry_rules.VERIFIED_COUNTRY_RULES.items():
+        assert rule.verified, code
+        assert rule.updated_at, code
+        assert rule.ordinary_passport, code
+
+
+def test_dataset_text_with_years_and_months():
+    assert "до 1 года" in "\n".join(entry._simple_entry_lines("без визы до 1 года"))
+    assert "до 3 месяцев" in "\n".join(entry._simple_entry_lines("без визы до 3 месяцев"))
+
+
+def test_egypt_card_is_not_plain_e_visa():
+    rule = entry_rules.VERIFIED_COUNTRY_RULES["EG"]
+    text = "\n".join(
+        entry._simple_entry_lines(
+            rule.ordinary_passport, rule.details, stay=rule.stay, verdict=rule.verdict
+        )
+    )
+
+    assert "по прибытии или электронная" in text
+    assert "15 дней" in text
