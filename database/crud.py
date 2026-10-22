@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, date
+from typing import NamedTuple
 
 from sqlalchemy import select, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -696,6 +697,20 @@ async def get_user_settings(telegram_id: int) -> UserSettings | None:
             select(UserSettings).where(UserSettings.user_id == user.id)
         )
         return result.scalar_one_or_none()
+
+
+class SearchFilters(NamedTuple):
+    direct_only: bool      # «Без пересадок»
+    cheapest_month: bool   # «Самые дешёвые на месяц» для поиска без даты
+
+
+async def get_search_filters(telegram_id: int) -> SearchFilters:
+    """Фильтры поиска пользователя. Без сохранённых настроек: без пересадок выкл, дешёвые на месяц вкл."""
+    settings = await get_user_settings(telegram_id)
+    return SearchFilters(
+        direct_only=bool(settings and settings.direct_flights_only),
+        cheapest_month=not settings or settings.cheapest_month_search is not False,
+    )
 
 
 async def update_user_settings(telegram_id: int, **kwargs) -> bool:

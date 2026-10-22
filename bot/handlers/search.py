@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
+from database.crud import get_search_filters
 from bot.states.search import SearchStates
 from bot.services.aviasales_api import aviasales_api
 from bot.services.city_resolver import city_resolver
@@ -88,7 +89,7 @@ async def cb_search_calendar_date(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text(f"Выбрана дата: <b>{format_date_full(date_str)}</b>")
     await callback.answer()
-    await _do_search(callback.message, origin, destination, date_str)
+    await _do_search(callback.message, origin, destination, date_str, callback.from_user.id)
 
 
 @router.callback_query(F.data == "search:nodate")
@@ -96,7 +97,7 @@ async def cb_search_nodate(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     data = await state.get_data()
     await state.clear()
-    await _do_search(callback.message, data["origin"], data["destination"], None)
+    await _do_search(callback.message, data["origin"], data["destination"], None, callback.from_user.id)
 
 
 @router.callback_query(F.data == "search:cancel")
@@ -117,11 +118,15 @@ async def process_date(message: Message, state: FSMContext):
 
     data = await state.get_data()
     await state.clear()
-    await _do_search(message, data["origin"], data["destination"], date_str)
+    await _do_search(message, data["origin"], data["destination"], date_str, message.from_user.id)
 
 
-async def _do_search(message: Message, origin: str, destination: str, depart_date: str | None):
-    """Выполняет поиск и отправляет результаты."""
+async def _do_search(message: Message, origin: str, destination: str, depart_date: str | None, user_id: int):
+    """Выполняет поиск и отправляет результаты с учётом фильтров пользователя."""
+    filters = await get_search_filters(user_id)
+    direct_only = filters.direct_only
+    direct_hint = "\nВключён фильтр «Без пересадок», выключить его можно в /settings."
+
     origin_name = city_resolver.get_city_name(origin)
     dest_name = city_resolver.get_city_name(destination)
 
@@ -165,11 +170,14 @@ async def _do_search(message: Message, origin: str, destination: str, depart_dat
                 seen_conn.add(key)
                 unique_connecting.append(t)
         unique_connecting.sort(key=lambda t: (t.get("transfers", 99), t.get("departure_at", "")))
+        if direct_only:
+            unique_connecting = []
 
         if not direct_tickets and not unique_connecting:
             await message.answer(
                 f"Рейсов {origin_name} → {dest_name} на {date_display} не найдено.\n"
                 "Попробуйте другую дату или проверьте маршрут."
+                + (direct_hint if direct_only else "")
             )
         else:
             # Прямые рейсы
@@ -210,6 +218,8 @@ async def _do_search(message: Message, origin: str, destination: str, depart_dat
 
         # ±1 день — самые дешёвые для сравнения
         nearby = await aviasales_api.get_nearby_cheapest(origin, destination, depart_date, days=1)
+        if direct_only:
+            nearby = [(d, t) for d, t in nearby if t.get("transfers", 99) == 0]
         if nearby:
             lines = ["<b>Самые дешёвые в соседние дни:</b>"]
             for date_str, t in nearby:
@@ -224,21 +234,36 @@ async def _do_search(message: Message, origin: str, destination: str, depart_dat
             await message.answer("\n".join(lines), disable_web_page_preview=True)
 
     else:
-        # --- Без даты: самые дешёвые на ближайший месяц, от дешёвых к дорогим ---
-        await message.answer(f"Ищу самые дешёвые билеты {origin_name} → {dest_name} на ближайший месяц...")
+        # --- Без даты ---
+        if filters.cheapest_month:
+            # Самые дешёвые на ближайший месяц, от дешёвых к дорогим
+            await message.answer(f"Ищу самые дешёвые билеты {origin_name} → {dest_name} на ближайший месяц...")
+            tickets = await aviasales_api.search_cheapest_in_window(origin, destination)
+            period_text = " на ближайший месяц"
+            headline = "Самые дешёвые на ближайший месяц — найдено"
+        else:
+            # Прежнее поведение: сначала прямые, потом по времени вылета
+            await message.answer(f"Ищу билеты {origin_name} → {dest_name}...")
+            tickets = await aviasales_api.search_all_options(
+                origin=origin,
+                destination=destination,
+                depart_date=None,
+            )
+            period_text = ""
+            headline = "Найдено"
 
-        tickets = await aviasales_api.search_cheapest_in_window(origin, destination)
+        if direct_only:
+            tickets = [t for t in tickets if t.get("transfers", 0) == 0]
 
         if not tickets:
             await message.answer(
-                f"Билеты {origin_name} → {dest_name} на ближайший месяц не найдены.\n"
+                f"Билеты {origin_name} → {dest_name}{period_text} не найдены.\n"
                 "Попробуйте выбрать конкретную дату или другой маршрут."
+                + (direct_hint if direct_only else "")
             )
             return
 
-        await message.answer(
-            f"<b>Самые дешёвые на ближайший месяц — найдено {len(tickets)} вариантов:</b>\n"
-        )
+        await message.answer(f"<b>{headline} {len(tickets)} вариантов:</b>\n")
 
         for ticket in tickets[:5]:
             ticket_link = aviasales_api.build_ticket_link(ticket, origin, destination, None)

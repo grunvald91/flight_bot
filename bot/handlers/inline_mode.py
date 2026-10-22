@@ -27,7 +27,7 @@ from bot.utils.formatters import (
 from bot.keyboards.common_kb import ticket_keyboard, connections_shortcut_keyboard
 from database.database import async_session_maker
 from database.models import User, SearchHistory, Favorite
-from database.crud import get_favorites
+from database.crud import get_favorites, get_search_filters
 from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ def _build_inline_day_label(date_str: str, start_date) -> str:
     return f"{weekdays[dep_date.weekday()]}, {dep_date.day} {months[dep_date.month]}"
 
 
-async def _search_route_without_date(
+async def _search_route_cheapest_month(
     origin: str,
     destination: str,
     start_date=None,
@@ -104,6 +104,84 @@ async def _search_route_without_date(
             continue
         ticket["inline_day_label"] = _build_inline_day_label(ticket["departure_at"], start_date)
         tickets.append(ticket)
+
+    return tickets
+
+
+async def _search_route_without_date(
+    origin: str,
+    destination: str,
+    start_date=None,
+    horizon_days: int = 7,
+    connections_only: bool = False,
+) -> list[dict]:
+    """
+    Быстрый inline-поиск без даты (режим «дешёвые на месяц» выключен).
+    Использует только лёгкий endpoint по каждому дню окна поиска,
+    чтобы успевать ответить в лимит Telegram.
+    """
+    if start_date is None:
+        start_date = datetime.now().date()
+
+    search_dates = []
+    tasks = []
+    for day_offset in range(max(1, horizon_days)):
+        search_date = start_date + timedelta(days=day_offset)
+        date_str = search_date.strftime("%Y-%m-%d")
+        search_dates.append(date_str)
+        if connections_only:
+            tasks.append(
+                aviasales_api.search_prices_for_dates(
+                    origin=origin,
+                    destination=destination,
+                    depart_date=date_str,
+                    return_date=None,
+                    one_way=True,
+                    direct=False,
+                    limit=30,
+                    unique=False,
+                    sorting="price",
+                )
+            )
+        else:
+            tasks.append(
+                aviasales_api.search_direct_on_date(
+                    origin=origin,
+                    destination=destination,
+                    depart_date=date_str,
+                )
+            )
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    tickets = []
+    for date_str, day_result in zip(search_dates, results):
+        if isinstance(day_result, Exception):
+            logger.error("No-date search failed for %s-%s on %s: %s", origin, destination, date_str, day_result)
+            continue
+        if not isinstance(day_result, list):
+            continue
+
+        for ticket in day_result:
+            if "value" in ticket and "price" not in ticket:
+                ticket["price"] = ticket["value"]
+            if "depart_date" in ticket and "departure_at" not in ticket:
+                ticket["departure_at"] = ticket["depart_date"]
+            if not ticket.get("departure_at"):
+                ticket["departure_at"] = date_str
+            if "return_date" in ticket and "return_at" not in ticket:
+                ticket["return_at"] = ticket["return_date"]
+            if "number_of_changes" in ticket and "transfers" not in ticket:
+                ticket["transfers"] = ticket["number_of_changes"]
+            if connections_only and ticket.get("transfers", 0) <= 0:
+                continue
+
+            ticket.setdefault("origin", origin)
+            ticket.setdefault("destination", destination)
+            ticket.setdefault("price", ticket.get("value", 0))
+            ticket.setdefault("transfers", 0)
+            ticket["inline_day_label"] = _build_inline_day_label(ticket["departure_at"], start_date)
+            tickets.append(ticket)
 
     return tickets
 
@@ -201,10 +279,17 @@ async def _handle_route_search(inline_query: InlineQuery, parsed, offset: int):
     parsed.origin = origin
     parsed.destination = destination
 
-    # Если дата не указана, используем быстрый параллельный поиск по окну дат.
+    filters = await get_search_filters(inline_query.from_user.id)
+    # Явный запрос «пересадки …» важнее общего фильтра «Без пересадок»
+    direct_only = filters.direct_only and not parsed.connections_only
+
+    # Если дата не указана: либо самые дешёвые на месяц, либо быстрый поиск по окну в 7 дней.
     tickets = []
     if not parsed.depart_date:
-        tickets = await _search_route_without_date(
+        search_without_date = (
+            _search_route_cheapest_month if filters.cheapest_month else _search_route_without_date
+        )
+        tickets = await search_without_date(
             origin,
             destination,
             connections_only=parsed.connections_only,
@@ -260,13 +345,23 @@ async def _handle_route_search(inline_query: InlineQuery, parsed, offset: int):
             unique_tickets.append(t)
     tickets = unique_tickets
 
+    if direct_only:
+        tickets = [t for t in tickets if t.get("transfers", 0) == 0]
+
     # Сортировка
-    if not parsed.depart_date:
-        # Без даты: ранжирование от самых дешёвых
+    if not parsed.depart_date and filters.cheapest_month:
+        # Без даты, «дешёвые на месяц»: ранжирование от самых дешёвых
         tickets.sort(
             key=lambda t: (
                 t.get("price", float("inf")),
                 t.get("departure_at") or t.get("depart_date", ""),
+            )
+        )
+    elif not parsed.depart_date:
+        tickets.sort(
+            key=lambda t: (
+                t.get("departure_at") or t.get("depart_date", ""),
+                t.get("price", float("inf")),
             )
         )
     else:
@@ -292,21 +387,27 @@ async def _handle_route_search(inline_query: InlineQuery, parsed, offset: int):
     await _save_search(inline_query.from_user.id, origin, destination,
                        parsed.depart_date, parsed.return_date, "route", len(tickets))
 
-    has_connections_shortcut = not parsed.connections_only
+    # При включённом «Без пересадок» кнопка «рейсы с пересадками» не нужна
+    has_connections_shortcut = not parsed.connections_only and not direct_only
     page_size = RESULTS_PER_PAGE - 1 if has_connections_shortcut and offset == 0 else RESULTS_PER_PAGE
     page = tickets[offset:offset + page_size]
 
     results = []
     if not page:
+        hint = (
+            "Включён фильтр «Без пересадок». Выключить: /settings"
+            if direct_only
+            else "Попробуйте указать дату или повторить поиск позже"
+        )
         results.append(
             InlineQueryResultArticle(
                 id="no_results",
                 title=f"Билеты не найдены: {origin_name} → {destination_name}",
-                description="Попробуйте указать дату или повторить поиск позже",
+                description=hint,
                 input_message_content=InputTextMessageContent(
                     message_text=(
                         f"По маршруту {origin_name} → {destination_name} пока не нашлось билетов.\n"
-                        "Попробуйте указать дату или повторить поиск чуть позже."
+                        f"{hint}."
                     ),
                 ),
             )

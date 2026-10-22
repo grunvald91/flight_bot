@@ -110,7 +110,10 @@ class UserSettings(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
 
     # Фильтры рейсов
+    # «Без пересадок»: действует и на поиск, и на уведомления о ценах
     direct_flights_only: Mapped[bool] = mapped_column(Boolean, default=False)
+    # «Самые дешёвые на месяц»: поиск без даты показывает билеты на ближайший месяц от дешёвых к дорогим
+    cheapest_month_search: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Настройки уведомлений

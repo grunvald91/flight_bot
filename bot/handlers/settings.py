@@ -39,7 +39,8 @@ def parse_min_price_drop_input(text: str) -> int | None:
 def _settings_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✈️ Только прямые рейсы", callback_data="settings:direct_flights")],
+            [InlineKeyboardButton(text="✈️ Без пересадок", callback_data="settings:direct_flights")],
+            [InlineKeyboardButton(text="📅 Самые дешёвые на месяц", callback_data="settings:cheapest_month")],
             [InlineKeyboardButton(text="🔔 Уведомления о ценах", callback_data="settings:notifications")],
             [InlineKeyboardButton(text="📉 Мин. снижение цены", callback_data="settings:min_price_drop")],
             [InlineKeyboardButton(text="⚙️ Управление подписками", callback_data="submgr:open")],
@@ -49,7 +50,7 @@ def _settings_keyboard() -> InlineKeyboardMarkup:
 
 
 def _direct_flights_keyboard(enabled: bool) -> InlineKeyboardMarkup:
-    toggle_text = "Выключить фильтр прямых" if enabled else "Включить фильтр прямых"
+    toggle_text = "Выключить «Без пересадок»" if enabled else "Включить «Без пересадок»"
     toggle_data = "settings:direct_off" if enabled else "settings:direct_on"
 
     return InlineKeyboardMarkup(
@@ -58,6 +59,32 @@ def _direct_flights_keyboard(enabled: bool) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings:main")],
         ]
     )
+
+
+def _cheapest_month_keyboard(enabled: bool) -> InlineKeyboardMarkup:
+    toggle_text = "Выключить «Дешёвые на месяц»" if enabled else "Включить «Дешёвые на месяц»"
+    toggle_data = "settings:cheapest_off" if enabled else "settings:cheapest_on"
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=toggle_text, callback_data=toggle_data)],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings:main")],
+        ]
+    )
+
+
+DIRECT_FLIGHTS_HELP = (
+    "Если фильтр включен, в поиске и в уведомлениях о ценах остаются только прямые рейсы."
+)
+CHEAPEST_MONTH_HELP = (
+    "Если включено, поиск по направлению без даты показывает самые дешёвые билеты "
+    "на ближайший месяц, от дешёвых к дорогим. "
+    "Если выключено, поиск без даты работает как раньше."
+)
+
+
+def _cheapest_month_enabled(settings) -> bool:
+    return not settings or settings.cheapest_month_search is not False
 
 
 def _notifications_keyboard(enabled: bool) -> InlineKeyboardMarkup:
@@ -108,12 +135,14 @@ async def _build_settings_text(telegram_id: int) -> str:
     settings = await get_user_settings(telegram_id)
 
     direct_enabled = bool(settings and settings.direct_flights_only)
+    cheapest_enabled = _cheapest_month_enabled(settings)
     notifications_enabled = _notifications_enabled(settings)
     min_drop_value = settings.min_price_drop if settings and settings.min_price_drop else MIN_PRICE_DROP
 
     return (
-        "<b>⚙️ Настройки уведомлений</b>\n\n"
-        f"Только прямые рейсы: <b>{'ВКЛ' if direct_enabled else 'ВЫКЛ'}</b>\n"
+        "<b>⚙️ Настройки</b>\n\n"
+        f"Без пересадок: <b>{'ВКЛ' if direct_enabled else 'ВЫКЛ'}</b>\n"
+        f"Самые дешёвые на месяц: <b>{'ВКЛ' if cheapest_enabled else 'ВЫКЛ'}</b>\n"
         f"Уведомления о ценах: <b>{'ВКЛ' if notifications_enabled else 'ВЫКЛ'}</b>\n"
         f"Мин. снижение цены: <b>{format_price(min_drop_value)}</b>\n\n"
         "Выберите действие:" 
@@ -157,7 +186,7 @@ async def cmd_direct(message: Message):
         settings = await get_user_settings(message.from_user.id)
         status = "ВКЛ" if settings and settings.direct_flights_only else "ВЫКЛ"
         await message.answer(
-            "<b>Фильтр прямых рейсов</b>\n\n"
+            "<b>Фильтр «Без пересадок»</b>\n\n"
             f"Сейчас: <b>{status}</b>\n\n"
             "Команды:\n"
             "<code>/direct on</code>\n"
@@ -170,12 +199,12 @@ async def cmd_direct(message: Message):
     action = args[1].lower()
     if action == "on":
         await update_user_settings(message.from_user.id, direct_flights_only=True)
-        await message.answer("✅ Фильтр прямых рейсов <b>включен</b>.", parse_mode="HTML")
+        await message.answer("✅ Фильтр «Без пересадок» <b>включен</b>.", parse_mode="HTML")
         return
 
     if action == "off":
         await update_user_settings(message.from_user.id, direct_flights_only=False)
-        await message.answer("✅ Фильтр прямых рейсов <b>выключен</b>.", parse_mode="HTML")
+        await message.answer("✅ Фильтр «Без пересадок» <b>выключен</b>.", parse_mode="HTML")
         return
 
     await message.answer(
@@ -267,9 +296,9 @@ async def callback_settings(callback: CallbackQuery, state: FSMContext):
         enabled = bool(settings and settings.direct_flights_only)
 
         text = (
-            "<b>✈️ Только прямые рейсы</b>\n\n"
+            "<b>✈️ Без пересадок</b>\n\n"
             f"Текущее состояние: <b>{'ВКЛ' if enabled else 'ВЫКЛ'}</b>\n\n"
-            "Если фильтр включен, уведомления приходят только по прямым рейсам."
+            f"{DIRECT_FLIGHTS_HELP}"
         )
 
         await callback.message.edit_text(
@@ -286,9 +315,9 @@ async def callback_settings(callback: CallbackQuery, state: FSMContext):
         await update_user_settings(callback.from_user.id, direct_flights_only=enable)
 
         text = (
-            "<b>✈️ Только прямые рейсы</b>\n\n"
+            "<b>✈️ Без пересадок</b>\n\n"
             f"Текущее состояние: <b>{'ВКЛ' if enable else 'ВЫКЛ'}</b>\n\n"
-            "Если фильтр включен, уведомления приходят только по прямым рейсам."
+            f"{DIRECT_FLIGHTS_HELP}"
         )
 
         await callback.message.edit_text(
@@ -297,6 +326,30 @@ async def callback_settings(callback: CallbackQuery, state: FSMContext):
             parse_mode="HTML",
         )
         await callback.answer(f"Фильтр: {'ВКЛ' if enable else 'ВЫКЛ'}")
+        return
+
+    if action in ["cheapest_month", "cheapest_on", "cheapest_off"]:
+        await _ensure_user(callback.from_user)
+        if action == "cheapest_month":
+            enabled = _cheapest_month_enabled(await get_user_settings(callback.from_user.id))
+        else:
+            enabled = action == "cheapest_on"
+            await update_user_settings(callback.from_user.id, cheapest_month_search=enabled)
+
+        text = (
+            "<b>📅 Самые дешёвые на месяц</b>\n\n"
+            f"Текущее состояние: <b>{'ВКЛ' if enabled else 'ВЫКЛ'}</b>\n\n"
+            f"{CHEAPEST_MONTH_HELP}"
+        )
+
+        await callback.message.edit_text(
+            text,
+            reply_markup=_cheapest_month_keyboard(enabled),
+            parse_mode="HTML",
+        )
+        await callback.answer(
+            f"Фильтр: {'ВКЛ' if enabled else 'ВЫКЛ'}" if action != "cheapest_month" else None
+        )
         return
 
     if action == "notifications":

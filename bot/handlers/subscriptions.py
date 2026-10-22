@@ -92,7 +92,7 @@ def _subscription_manage_keyboard(settings) -> InlineKeyboardMarkup:
     notifications_text = "🔔 Уведомления: Вкл" if notifications_on else "🔕 Уведомления: Выкл"
     notifications_data = "submgr:notifications_off" if notifications_on else "submgr:notifications_on"
 
-    direct_text = "✈️ Прямые рейсы: Вкл" if direct_only else "✈️ Прямые рейсы: Выкл"
+    direct_text = "✈️ Без пересадок: Вкл" if direct_only else "✈️ Без пересадок: Выкл"
     direct_data = "submgr:direct_off" if direct_only else "submgr:direct_on"
 
     return InlineKeyboardMarkup(
@@ -322,7 +322,7 @@ async def _build_management_text(telegram_id: int) -> str:
         f"Подписок всего: <b>{total}</b>\n"
         f"На паузе: <b>{paused}</b>\n\n"
         f"Уведомления о ценах: <b>{'ВКЛ' if notifications_on else 'ВЫКЛ'}</b>\n"
-        f"Только прямые рейсы: <b>{'ВКЛ' if direct_only else 'ВЫКЛ'}</b>\n"
+        f"Без пересадок: <b>{'ВКЛ' if direct_only else 'ВЫКЛ'}</b>\n"
         f"Мин. снижение цены: <b>{format_price(min_drop)}</b>\n\n"
         "Выберите действие:" 
     )
@@ -580,13 +580,13 @@ async def cb_submgr_actions(callback: CallbackQuery, state: FSMContext):
     if action == "direct_on":
         await update_user_settings(callback.from_user.id, direct_flights_only=True)
         await _show_management(callback.message, callback.from_user.id, edit=True)
-        await callback.answer("Фильтр прямых рейсов включен")
+        await callback.answer("Фильтр «Без пересадок» включен")
         return
 
     if action == "direct_off":
         await update_user_settings(callback.from_user.id, direct_flights_only=False)
         await _show_management(callback.message, callback.from_user.id, edit=True)
-        await callback.answer("Фильтр прямых рейсов выключен")
+        await callback.answer("Фильтр «Без пересадок» выключен")
         return
 
     if action == "pause_all":
