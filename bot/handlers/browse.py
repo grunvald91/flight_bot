@@ -5,6 +5,7 @@ import secrets
 from datetime import date, datetime
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -15,7 +16,8 @@ from bot.keyboards.common_kb import persistent_menu_keyboard
 from bot.services.aviasales_api import aviasales_api
 from bot.services.city_resolver import city_resolver
 from bot.services.discovery_archive import can_open_result, discovery_archive
-from bot.services.fast_browse import PAGE_SIZE, load_indicative_destinations, page_options
+from bot.services.fast_browse import PAGE_SIZE, load_indicative_destinations, page_options, visible_options
+from bot.services.search_prefs import load_direct_only, save_direct_only
 from bot.states.search import FastBrowseStates
 from bot.utils.parsers import _parse_date
 
@@ -138,26 +140,41 @@ async def _run_browse(message: Message, origin: str, departure_date: str, *, own
         logger.exception("Could not save indicative browse results")
         await progress.edit_text("Не удалось сохранить результаты. Попробуйте ещё раз.")
         return
+    # Переключатель «Без пересадок» стартует с последнего выбора пользователя
+    direct_only = await load_direct_only(owner_id)
     await progress.edit_text(
-        _format_page(payload, 0), disable_web_page_preview=True,
-        reply_markup=_page_keyboard(key, payload, 0),
+        _format_page(payload, 0, direct_only), disable_web_page_preview=True,
+        reply_markup=_page_keyboard(key, payload, 0, direct_only),
     )
 
 
-def _format_page(payload: dict, page: int) -> str:
+def _total_pages(count: int) -> int:
+    return max(1, (count + PAGE_SIZE - 1) // PAGE_SIZE)
+
+
+def _format_page(payload: dict, page: int, direct_only: bool = False) -> str:
     options = payload["options"]
     meta = payload["meta"]
-    total_pages = (len(options) + PAGE_SIZE - 1) // PAGE_SIZE
-    lines = [
-        f"<b>⚡ Зарубежные направления · {_date_label(meta['departure_date'])}</b>",
-        f"Вариантов: <b>{len(options)}</b> · страница <b>{page + 1}/{total_pages}</b>",
+    view = visible_options(options, direct_only)
+    total_pages = _total_pages(len(view))
+    lines = [f"<b>⚡ Зарубежные направления · {_date_label(meta['departure_date'])}</b>"]
+    if direct_only:
+        lines.append("✈️ Только без пересадок")
+        lines.append(
+            f"Вариантов: <b>{len(view)}</b> из {len(options)} · страница <b>{page + 1}/{total_pages}</b>"
+        )
+    else:
+        lines.append(f"Вариантов: <b>{len(options)}</b> · страница <b>{page + 1}/{total_pages}</b>")
+    lines += [
         "Сортировка: цена ↑, при равной цене — меньше пересадок.",
         "Выберите направление или сразу нажмите «ℹ️ Виза и документы».",
         "",
     ]
-    for index, option in enumerate(page_options(options, page), start=page * PAGE_SIZE + 1):
+    if not view:
+        lines.append("Вариантов без пересадок на эту дату нет. Выключите «Без пересадок», чтобы увидеть все.")
+    for rank, (_, option) in enumerate(page_options(view, page), start=page * PAGE_SIZE + 1):
         lines.append(
-            f"<b>{index}.</b> {html.escape(str(option['country']))} — "
+            f"<b>{rank}.</b> {html.escape(str(option['country']))} — "
             f"{html.escape(str(option['city']))} · ≈{_money(option['price'])} ₽ · "
             f"{_stops_label(option.get('transfers'))}"
         )
@@ -167,19 +184,21 @@ def _format_page(payload: dict, page: int) -> str:
     return "\n".join(lines)
 
 
-def _page_keyboard(key: str, payload: dict, page: int) -> InlineKeyboardMarkup:
-    options = payload["options"]
-    rows: list[list[InlineKeyboardButton]] = []
-    for index, option in enumerate(
-        page_options(options, page),
-        start=page * PAGE_SIZE,
-    ):
+def _page_keyboard(key: str, payload: dict, page: int, direct_only: bool = False) -> InlineKeyboardMarkup:
+    view = visible_options(payload["options"], direct_only)
+    rows: list[list[InlineKeyboardButton]] = [[
+        InlineKeyboardButton(
+            text="✈️ Без пересадок: ВКЛ ✅" if direct_only else "✈️ Без пересадок: ВЫКЛ",
+            callback_data=f"brdirect:{key}:{int(not direct_only)}",
+        )
+    ]]
+    for rank, (index, option) in enumerate(page_options(view, page), start=page * PAGE_SIZE + 1):
         city = str(option.get("city") or option.get("destination") or "Направление")
         if len(city) > 22:
             city = city[:21] + "…"
         row = [
             InlineKeyboardButton(
-                text=f"{index + 1}. {city}",
+                text=f"{rank}. {city}",
                 callback_data=f"brsel:{key}:{index}",
             )
         ]
@@ -196,8 +215,8 @@ def _page_keyboard(key: str, payload: dict, page: int) -> InlineKeyboardMarkup:
     nav = []
     if page:
         nav.append(InlineKeyboardButton(text="◀️", callback_data=f"brpage:{key}:{page - 1}"))
-    nav.append(InlineKeyboardButton(text=f"{page + 1}/{(len(options) + PAGE_SIZE - 1) // PAGE_SIZE}", callback_data="calnoop"))
-    if (page + 1) * PAGE_SIZE < len(options):
+    nav.append(InlineKeyboardButton(text=f"{page + 1}/{_total_pages(len(view))}", callback_data="calnoop"))
+    if (page + 1) * PAGE_SIZE < len(view):
         nav.append(InlineKeyboardButton(text="▶️", callback_data=f"brpage:{key}:{page + 1}"))
     rows.append(nav)
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -229,17 +248,48 @@ async def browse_page(callback: CallbackQuery):
     payload = await _payload(callback, key)
     if payload is None:
         return
-    if page < 0 or not page_options(payload["options"], page):
+    direct_only = await load_direct_only(callback.from_user.id)
+    view = visible_options(payload["options"], direct_only)
+    if page < 0 or (page > 0 and not page_options(view, page)):
         await callback.answer("Такой страницы нет.", show_alert=True)
         return
     await callback.message.edit_text(
-        _format_page(payload, page), disable_web_page_preview=True,
-        reply_markup=_page_keyboard(key, payload, page),
+        _format_page(payload, page, direct_only), disable_web_page_preview=True,
+        reply_markup=_page_keyboard(key, payload, page, direct_only),
     )
     await callback.answer()
 
 
-def _selected_keyboard(key: str, index: int, option: dict, departure_date: str) -> InlineKeyboardMarkup:
+@router.callback_query(F.data.startswith("brdirect:"))
+async def browse_direct_toggle(callback: CallbackQuery):
+    try:
+        _, key, raw_value = (callback.data or "").split(":", 2)
+    except ValueError:
+        await callback.answer("Некорректная кнопка", show_alert=True)
+        return
+    if raw_value not in ("0", "1"):
+        await callback.answer("Некорректная кнопка", show_alert=True)
+        return
+    payload = await _payload(callback, key)
+    if payload is None:
+        return
+    direct_only = raw_value == "1"
+    saved = await save_direct_only(callback.from_user, direct_only)
+    # Если запомнить не вышло, переключатель всё равно работает в этой выдаче
+    try:
+        await callback.message.edit_text(
+            _format_page(payload, 0, direct_only), disable_web_page_preview=True,
+            reply_markup=_page_keyboard(key, payload, 0, direct_only),
+        )
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc):
+            raise
+    await callback.answer(None if saved else "Фильтр применён, но запомнить выбор не удалось")
+
+
+def _selected_keyboard(
+    key: str, index: int, option: dict, departure_date: str, back_page: int | None = None,
+) -> InlineKeyboardMarkup:
     url = aviasales_api.build_search_link(option["origin"], option["destination"], departure_date)
     rows = [
         [InlineKeyboardButton(text="🟣 Туту", callback_data=f"brtutu:{key}:{index}"),
@@ -253,10 +303,18 @@ def _selected_keyboard(key: str, index: int, option: dict, departure_date: str) 
                 callback_data=f"entry:{country_code}",
             )
         ])
+    if back_page is None:
+        back_page = index // PAGE_SIZE
     rows.append([
-        InlineKeyboardButton(text="⬅️ К списку", callback_data=f"brpage:{key}:{index // PAGE_SIZE}")
+        InlineKeyboardButton(text="⬅️ К списку", callback_data=f"brpage:{key}:{back_page}")
     ])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _back_page(options: list[dict], index: int, direct_only: bool) -> int:
+    """Страница списка, на которой стоит вариант `index`, с учётом фильтра «Без пересадок»."""
+    positions = [i for i, _ in visible_options(options, direct_only)]
+    return positions.index(index) // PAGE_SIZE if index in positions else 0
 
 
 @router.callback_query(F.data.startswith("brsel:"))
@@ -282,9 +340,13 @@ async def browse_select(callback: CallbackQuery):
         lines.append(f"В пути: {option['duration']} мин")
     lines.append("\n⚠️ Цена и рейс из Aviasales не гарантируют наличия у Туту. "
                  "Проверьте выбранное направление отдельно у нужного провайдера.")
+    direct_only = await load_direct_only(callback.from_user.id)
     await callback.message.edit_text(
         "\n".join(lines), disable_web_page_preview=True,
-        reply_markup=_selected_keyboard(key, index, option, payload["meta"]["departure_date"]),
+        reply_markup=_selected_keyboard(
+            key, index, option, payload["meta"]["departure_date"],
+            back_page=_back_page(payload["options"], index, direct_only),
+        ),
     )
     await callback.answer()
 

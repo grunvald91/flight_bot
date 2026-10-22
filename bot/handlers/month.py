@@ -1,8 +1,9 @@
 """Отдельный поиск: самые дешёвые билеты по направлению на ближайший месяц.
 
 Выдача ранжирована от дешёвых к дорогим, листается страницами, а переключатель
-«Без пересадок» живёт прямо под выдачей. Состояние поиска целиком хранится в callback_data
-(направление, переключатель, страница), поэтому кнопки работают и после перезапуска бота.
+«Без пересадок» живёт прямо под выдачей. Состояние выдачи (направление, переключатель, страница)
+хранится в callback_data, поэтому кнопки работают и после перезапуска бота. Последний выбор
+переключателя запоминается за пользователем (bot/services/search_prefs.py) и общий с «Дешёвые за границу».
 """
 import html
 import logging
@@ -18,6 +19,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from bot.keyboards.common_kb import persistent_menu_keyboard
 from bot.services.aviasales_api import aviasales_api
 from bot.services.city_resolver import city_resolver
+from bot.services.search_prefs import load_direct_only, save_direct_only
 from bot.states.search import MonthSearchStates
 from bot.utils.formatters import format_date_short, format_price, format_time, format_transfers
 
@@ -85,7 +87,9 @@ async def month_destination(message: Message, state: FSMContext):
     await state.clear()
 
     progress = await message.answer("⏳ Ищу самые дешёвые билеты на ближайший месяц...")
-    text, keyboard = await _render(origin, destination, direct_only=False, page=0)
+    # Переключатель «Без пересадок» стартует с последнего выбора пользователя
+    direct_only = await load_direct_only(message.from_user.id)
+    text, keyboard = await _render(origin, destination, direct_only=direct_only, page=0)
     try:
         await progress.edit_text(text, reply_markup=keyboard, disable_web_page_preview=True)
     except TelegramBadRequest:
@@ -110,9 +114,33 @@ def _parse_callback(data: str) -> tuple[str, str, bool, int] | None:
     return origin, destination, direct == "1", int(page)
 
 
+def _parse_toggle(data: str) -> tuple[str, str, bool] | None:
+    """mt:ORIGIN:DEST:{0|1} — переключатель «Без пересадок»; значение — новое состояние."""
+    parts = (data or "").split(":")
+    if len(parts) != 4 or parts[0] != "mt":
+        return None
+    _, origin, destination, direct = parts
+    if not _IATA_RE.match(origin) or not _IATA_RE.match(destination) or direct not in ("0", "1"):
+        return None
+    return origin, destination, direct == "1"
+
+
 @router.callback_query(F.data == "mo:noop")
 async def cb_month_noop(callback: CallbackQuery):
     await callback.answer()
+
+
+async def _redraw(
+    callback: CallbackQuery, origin: str, destination: str, direct_only: bool, page: int,
+    notice: str | None = None,
+):
+    text, keyboard = await _render(origin, destination, direct_only=direct_only, page=page)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, disable_web_page_preview=True)
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc):
+            raise
+    await callback.answer(notice)
 
 
 @router.callback_query(F.data.startswith("mo:"))
@@ -122,14 +150,23 @@ async def cb_month_view(callback: CallbackQuery):
         await callback.answer("Кнопка устарела. Начните заново: /month", show_alert=True)
         return
     origin, destination, direct_only, page = parsed
+    await _redraw(callback, origin, destination, direct_only, page)
 
-    text, keyboard = await _render(origin, destination, direct_only=direct_only, page=page)
-    try:
-        await callback.message.edit_text(text, reply_markup=keyboard, disable_web_page_preview=True)
-    except TelegramBadRequest as exc:
-        if "message is not modified" not in str(exc):
-            raise
-    await callback.answer()
+
+@router.callback_query(F.data.startswith("mt:"))
+async def cb_month_toggle(callback: CallbackQuery):
+    parsed = _parse_toggle(callback.data)
+    if not parsed:
+        await callback.answer("Кнопка устарела. Начните заново: /month", show_alert=True)
+        return
+    origin, destination, direct_only = parsed
+
+    saved = await save_direct_only(callback.from_user, direct_only)
+    # Если запомнить не вышло, переключатель всё равно работает в этой выдаче
+    await _redraw(
+        callback, origin, destination, direct_only, 0,
+        notice=None if saved else "Фильтр применён, но запомнить выбор не удалось",
+    )
 
 
 async def _load_tickets(origin: str, destination: str, direct_only: bool) -> list[dict]:
@@ -163,7 +200,7 @@ def _keyboard(origin: str, destination: str, direct_only: bool, page: int, pages
     rows = [[
         InlineKeyboardButton(
             text=toggle_text,
-            callback_data=_callback_data(origin, destination, not direct_only, 0),
+            callback_data=f"mt:{origin}:{destination}:{int(not direct_only)}",
         )
     ]]
 

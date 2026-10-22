@@ -1,5 +1,6 @@
 import re
 from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -48,6 +49,25 @@ def _cities(monkeypatch):
     monkeypatch.setattr(city_resolver, "get_airline_name", lambda code: code)
 
 
+@pytest.fixture(autouse=True)
+def prefs(monkeypatch):
+    """Память выбора «Без пересадок» подменена словарём; fail=True имитирует сбой записи."""
+    store = SimpleNamespace(data={}, fail=False)
+
+    async def load(user_id):
+        return store.data.get(user_id, False)
+
+    async def save(user, value):
+        if store.fail:
+            return False
+        store.data[user.id] = value
+        return True
+
+    monkeypatch.setattr(month, "load_direct_only", load)
+    monkeypatch.setattr(month, "save_direct_only", save)
+    return store
+
+
 def _use_api(monkeypatch, tickets):
     api = _FakeApi(tickets)
     monkeypatch.setattr(month, "aviasales_api", api)
@@ -91,7 +111,7 @@ async def test_toggle_off_by_default_and_flips_on_press(monkeypatch):
 
     toggle = _by_text(keyboard, "Без пересадок")[0]
     assert "ВЫКЛ" in toggle.text
-    assert toggle.callback_data == "mo:AER:LED:1:0"
+    assert toggle.callback_data == "mt:AER:LED:1"
 
 
 @pytest.mark.asyncio
@@ -105,7 +125,7 @@ async def test_toggle_on_leaves_only_direct_flights(monkeypatch):
     assert "Только без пересадок" in text
     toggle = _by_text(keyboard, "Без пересадок")[0]
     assert "ВКЛ" in toggle.text
-    assert toggle.callback_data == "mo:AER:LED:0:0"  # повторное нажатие выключает
+    assert toggle.callback_data == "mt:AER:LED:0"  # повторное нажатие выключает
 
 
 @pytest.mark.asyncio
@@ -196,7 +216,7 @@ async def test_toggle_from_a_later_page_returns_to_first_page(monkeypatch):
 
     _, keyboard = await month._render("AER", "LED", direct_only=False, page=2)
 
-    assert _by_text(keyboard, "Без пересадок")[0].callback_data == "mo:AER:LED:1:0"
+    assert _by_text(keyboard, "Без пересадок")[0].callback_data == "mt:AER:LED:1"
 
 
 @pytest.mark.asyncio
@@ -243,16 +263,20 @@ class _FakeMessage:
 
 
 class _FakeCallback:
-    def __init__(self, data):
+    def __init__(self, data, user_id=42):
         self.data = data
+        self.from_user = SimpleNamespace(id=user_id, username="u", first_name="U")
         self.message = _FakeMessage()
         self.alerts = []
+        self.notices = []
         self.answered = 0
 
     async def answer(self, text=None, show_alert=False):
         self.answered += 1
         if show_alert:
             self.alerts.append(text)
+        elif text:
+            self.notices.append(text)
 
 
 @pytest.mark.asyncio
@@ -300,9 +324,10 @@ class _FakeState:
 
 
 class _FakeUserMessage(_FakeMessage):
-    def __init__(self, text):
+    def __init__(self, text, user_id=42):
         super().__init__()
         self.text = text
+        self.from_user = SimpleNamespace(id=user_id, username="u", first_name="U")
 
 
 @pytest.mark.asyncio
@@ -341,7 +366,7 @@ async def test_origin_then_destination_runs_the_search(monkeypatch):
     assert state.state is None  # состояние не висит: дальше всё на кнопках
     text, kwargs = message.edits[0]
     assert text.index("5 000") < text.index("9 000")
-    assert "mo:AER:LED:1:0" in [b.callback_data for b in _buttons(kwargs["reply_markup"])]
+    assert "mt:AER:LED:1" in [b.callback_data for b in _buttons(kwargs["reply_markup"])]
 
 
 @pytest.mark.asyncio
@@ -351,6 +376,105 @@ async def test_destination_without_origin_asks_to_restart():
     await month.month_destination(message, state)
 
     assert "/month" in message.answers[0][0]
+
+
+# ── Запоминание переключателя «Без пересадок» ──
+
+@pytest.mark.parametrize(
+    "data, expected",
+    [
+        ("mt:AER:LED:1", ("AER", "LED", True)),
+        ("mt:MOW:IST:0", ("MOW", "IST", False)),
+        ("mt:AER:LED:2", None),
+        ("mt:AER:LED", None),
+        ("mt:AER:LED:1:0", None),
+        ("mt:aer:LED:1", None),
+        ("mo:AER:LED:1", None),
+    ],
+)
+def test_parse_toggle(data, expected):
+    assert month._parse_toggle(data) == expected
+
+
+@pytest.mark.asyncio
+async def test_search_starts_with_the_last_saved_choice(monkeypatch, prefs):
+    _use_api(monkeypatch, [_ticket(4000, transfers=1), _ticket(9000)])
+    prefs.data[42] = True
+    state = _FakeState()
+
+    await month.month_origin(_FakeUserMessage("AER"), state)
+    message = _FakeUserMessage("LED")
+    await month.month_destination(message, state)
+
+    text, kwargs = message.edits[0]
+    assert "9 000" in text and "4 000" not in text
+    assert "Только без пересадок" in text
+    toggle = _by_text(kwargs["reply_markup"], "Без пересадок")[0]
+    assert "ВКЛ" in toggle.text and toggle.callback_data == "mt:AER:LED:0"
+
+
+@pytest.mark.asyncio
+async def test_saved_choice_is_per_person(monkeypatch, prefs):
+    _use_api(monkeypatch, [_ticket(4000, transfers=1), _ticket(9000)])
+    prefs.data[42] = True
+
+    state = _FakeState({"month_origin": "AER"})
+    other = _FakeUserMessage("LED", user_id=77)  # у этого человека выбора нет
+    await month.month_destination(other, state)
+
+    assert "4 000" in other.edits[0][0]
+
+
+@pytest.mark.asyncio
+async def test_pressing_toggle_saves_the_choice_and_redraws(monkeypatch, prefs):
+    _use_api(monkeypatch, [_ticket(4000, transfers=1), _ticket(9000)])
+
+    on = _FakeCallback("mt:AER:LED:1", user_id=77)
+    await month.cb_month_toggle(on)
+
+    assert prefs.data[77] is True
+    text, kwargs = on.message.edits[0]
+    assert "9 000" in text and "4 000" not in text
+    assert _by_text(kwargs["reply_markup"], "Без пересадок")[0].callback_data == "mt:AER:LED:0"
+    assert on.notices == []
+
+    off = _FakeCallback("mt:AER:LED:0", user_id=77)
+    await month.cb_month_toggle(off)
+
+    assert prefs.data[77] is False
+    assert "4 000" in off.message.edits[0][0]
+
+
+@pytest.mark.asyncio
+async def test_page_buttons_do_not_change_the_saved_choice(monkeypatch, prefs):
+    _use_api(monkeypatch, [_ticket(1000 + i) for i in range(25)])
+
+    await month.cb_month_view(_FakeCallback("mo:AER:LED:0:1"))
+
+    assert prefs.data == {}
+
+
+@pytest.mark.asyncio
+async def test_toggle_still_works_when_saving_fails(monkeypatch, prefs):
+    _use_api(monkeypatch, [_ticket(4000, transfers=1), _ticket(9000)])
+    prefs.fail = True
+    callback = _FakeCallback("mt:AER:LED:1")
+
+    await month.cb_month_toggle(callback)
+
+    assert "4 000" not in callback.message.edits[0][0]  # фильтр применился
+    assert callback.notices and "запомнить" in callback.notices[0]
+
+
+@pytest.mark.asyncio
+async def test_broken_toggle_button_is_rejected_without_saving(monkeypatch, prefs):
+    api = _use_api(monkeypatch, [_ticket(5000)])
+    callback = _FakeCallback("mt:garbage")
+
+    await month.cb_month_toggle(callback)
+
+    assert callback.alerts and prefs.data == {}
+    assert api.calls == [] and callback.message.edits == []
 
 
 # ── Метод запроса билетов на месяц ──

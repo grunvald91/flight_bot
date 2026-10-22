@@ -79,6 +79,12 @@ async def _ensure_user_settings_columns(conn):
                 "ADD COLUMN IF NOT EXISTS notifications_enabled BOOLEAN DEFAULT TRUE"
             )
         )
+        await conn.execute(
+            text(
+                "ALTER TABLE user_settings "
+                "ADD COLUMN IF NOT EXISTS search_direct_only BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )
         return
 
     if dialect == "sqlite":
@@ -87,6 +93,10 @@ async def _ensure_user_settings_columns(conn):
         if "notifications_enabled" not in columns:
             await conn.execute(
                 text("ALTER TABLE user_settings ADD COLUMN notifications_enabled BOOLEAN DEFAULT 1")
+            )
+        if "search_direct_only" not in columns:
+            await conn.execute(
+                text("ALTER TABLE user_settings ADD COLUMN search_direct_only BOOLEAN NOT NULL DEFAULT 0")
             )
 
 

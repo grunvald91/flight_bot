@@ -698,6 +698,23 @@ async def get_user_settings(telegram_id: int) -> UserSettings | None:
         return result.scalar_one_or_none()
 
 
+async def get_search_direct_only(telegram_id: int) -> bool:
+    """Последний выбор переключателя «Без пересадок» в поиске. Без сохранённого выбора: выключено."""
+    settings = await get_user_settings(telegram_id)
+    return bool(settings and settings.search_direct_only)
+
+
+async def set_search_direct_only(
+    telegram_id: int,
+    value: bool,
+    username: str | None = None,
+    first_name: str | None = None,
+) -> None:
+    """Запоминает выбор переключателя «Без пересадок». Создаёт пользователя, если его ещё нет."""
+    await get_or_create_user(telegram_id, username=username, first_name=first_name)
+    await update_user_settings(telegram_id, search_direct_only=bool(value))
+
+
 async def update_user_settings(telegram_id: int, **kwargs) -> bool:
     """Обновляет настройки пользователя."""
     async with async_session_maker() as session:

@@ -111,6 +111,9 @@ class UserSettings(Base):
 
     # Фильтры рейсов
     direct_flights_only: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Последний выбор переключателя «Без пересадок» в поиске («Дешёвые на месяц» и «Дешёвые за границу»).
+    # Отдельно от direct_flights_only, который относится к уведомлениям о ценах.
+    search_direct_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Настройки уведомлений

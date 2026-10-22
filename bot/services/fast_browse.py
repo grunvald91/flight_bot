@@ -42,10 +42,22 @@ def _stops(row: dict) -> int | None:
         return None
 
 
-def page_options(options: list[dict], page: int) -> list[dict]:
+def page_options(options: list, page: int) -> list:
     if page < 0:
         return []
     return options[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
+
+
+def visible_options(options: list[dict], direct_only: bool) -> list[tuple[int, dict]]:
+    """Что показывать в списке: пары (номер в полном списке, вариант).
+
+    Кнопки выбора направления ссылаются на номер в полном списке, поэтому он сохраняется
+    и при фильтре «Без пересадок». Вариант с неизвестным числом пересадок прямым не считается.
+    """
+    return [
+        (index, option) for index, option in enumerate(options)
+        if not direct_only or option.get("transfers") == 0
+    ]
 
 
 async def load_indicative_destinations(origin: str, departure_date: str) -> IndicativeResults:
