@@ -26,8 +26,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Сайт МИД бывает на регламентных работах. Тогда деплой не останавливается:
+      # снимок не обновляется, а на сервере остаётся прежний файл правил.
       - name: Refresh official KDMID entry-rules snapshot
+        id: kdmid
+        continue-on-error: true
         run: python scripts/fetch_kdmid_entry_rules.py
+
+      - name: Skip the entry-rules file if it was not refreshed
+        if: steps.kdmid.outcome != 'success'
+        run: |
+          echo "::warning::KDMID недоступен — файл правил въезда на сервере не обновляется"
+          echo "DEPLOY_FILES=$(echo "$DEPLOY_FILES" | tr ',' '\n' | grep -vx 'data/kdmid_entry_rules.csv' | paste -sd, -)" >> "$GITHUB_ENV"
 
       - name: Back up files that will be replaced
         uses: appleboy/ssh-action@v1
