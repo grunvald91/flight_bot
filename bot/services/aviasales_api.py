@@ -110,15 +110,20 @@ class AviasalesAPI:
         origin: str,
         depart_date: str,
         limit: int = 1000,
+        direct: bool = False,
     ) -> list[dict]:
-        """All reported candidate destinations for an exact date, page by page."""
+        """All reported candidate destinations for an exact date, page by page.
+
+        Source gives one (the cheapest) fare per destination. With direct=True that is
+        the cheapest non-stop fare, which can differ from the cheapest fare overall.
+        """
         if not 1 <= limit <= 1000:
             raise ValueError("Aviasales page size must be between 1 and 1000")
         params = {
             "origin": origin,
             "currency": "rub",
             "sorting": "price",
-            "direct": "false",
+            "direct": "true" if direct else "false",
             "one_way": "true",
             "unique": "true",
             "limit": limit,
@@ -131,7 +136,7 @@ class AviasalesAPI:
         page = 1
         while True:
             params["page"] = page
-            cache_key = f"destinations:{origin}:{depart_date}:{limit}:{page}"
+            cache_key = f"destinations:{origin}:{depart_date}:{limit}:{page}" + (":direct" if direct else "")
             data = await self._cached_request(
                 cache_key, "/aviasales/v3/prices_for_dates", params,
             )

@@ -17,7 +17,9 @@ from bot.keyboards.common_kb import persistent_menu_keyboard
 from bot.services.aviasales_api import aviasales_api
 from bot.services.city_resolver import city_resolver
 from bot.services.discovery_archive import can_open_result, discovery_archive
-from bot.services.fast_browse import PAGE_SIZE, load_indicative_destinations, page_options, visible_options
+from bot.services.fast_browse import (
+    PAGE_SIZE, direct_view, load_indicative_destinations, page_options, visible_options,
+)
 from bot.services.search_prefs import load_direct_only, save_direct_only
 from bot.states.search import FastBrowseStates
 from bot.utils.parsers import _parse_date
@@ -133,7 +135,8 @@ async def _run_browse(message: Message, origin: str, departure_date: str, *, own
         "options": result.options,
         "meta": {"owner_id": owner_id, "chat_id": message.chat.id,
                  "origin": origin, "departure_date": departure_date,
-                 "source_rows": result.source_rows, "unresolved": result.unresolved},
+                 "source_rows": result.source_rows, "unresolved": result.unresolved,
+                 "direct_checked": result.direct_checked},
     }
     try:
         discovery_archive.put_browse(key, payload)
@@ -160,7 +163,9 @@ def _format_page(payload: dict, page: int, direct_only: bool = False) -> str:
     total_pages = _total_pages(len(view))
     lines = [f"<b>⚡ Зарубежные направления · {_date_label(meta['departure_date'])}</b>"]
     if direct_only:
-        lines.append("✈️ Только без пересадок")
+        lines.append("✈️ Только без пересадок · цена самого дешёвого прямого рейса")
+        if meta.get("direct_checked") is False:
+            lines.append("⚠️ Прямые рейсы запросить не удалось, список может быть неполным.")
         lines.append(
             f"Вариантов: <b>{len(view)}</b> из {len(options)} · страница <b>{page + 1}/{total_pages}</b>"
         )
@@ -343,6 +348,8 @@ async def browse_select(callback: CallbackQuery):
         number, total = positions.index(index) + 1, len(positions)
     else:
         number, total = index + 1, len(payload["options"])
+    if direct_only:  # в этом режиме показываем самый дешёвый прямой билет
+        option = direct_view(option) or option
     departure_at = option.get("departure_at") or (payload["meta"]["departure_date"])
     lines = [
         f"<b>⚡ Направление {number} из {total}</b>",
