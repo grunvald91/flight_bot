@@ -224,23 +224,21 @@ async def _do_search(message: Message, origin: str, destination: str, depart_dat
             await message.answer("\n".join(lines), disable_web_page_preview=True)
 
     else:
-        # --- Без даты: прежнее поведение ---
-        await message.answer(f"Ищу билеты {origin_name} → {dest_name}...")
+        # --- Без даты: самые дешёвые на ближайший месяц, от дешёвых к дорогим ---
+        await message.answer(f"Ищу самые дешёвые билеты {origin_name} → {dest_name} на ближайший месяц...")
 
-        tickets = await aviasales_api.search_all_options(
-            origin=origin,
-            destination=destination,
-            depart_date=None,
-        )
+        tickets = await aviasales_api.search_cheapest_in_window(origin, destination)
 
         if not tickets:
             await message.answer(
-                f"Билеты {origin_name} → {dest_name} не найдены.\n"
-                "Попробуйте другие даты или маршрут."
+                f"Билеты {origin_name} → {dest_name} на ближайший месяц не найдены.\n"
+                "Попробуйте выбрать конкретную дату или другой маршрут."
             )
             return
 
-        await message.answer(f"<b>Найдено {len(tickets)} вариантов:</b>\n")
+        await message.answer(
+            f"<b>Самые дешёвые на ближайший месяц — найдено {len(tickets)} вариантов:</b>\n"
+        )
 
         for ticket in tickets[:5]:
             ticket_link = aviasales_api.build_ticket_link(ticket, origin, destination, None)

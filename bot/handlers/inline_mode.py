@@ -84,76 +84,26 @@ async def _search_route_without_date(
     origin: str,
     destination: str,
     start_date=None,
-    horizon_days: int = 7,
+    horizon_days: int = 30,
     connections_only: bool = False,
 ) -> list[dict]:
     """
-    Быстрый inline-поиск без даты.
-    Использует только лёгкий endpoint по каждому дню окна поиска,
-    чтобы успевать ответить в лимит Telegram.
+    Inline-поиск без даты: самые дешёвые билеты по направлению на ближайший месяц,
+    от дешёвых к дорогим. Это один-два запроса на месяц окна, поэтому Telegram успевает получить ответ.
     """
     if start_date is None:
         start_date = datetime.now().date()
 
-    search_dates = []
-    tasks = []
-    for day_offset in range(max(1, horizon_days)):
-        search_date = start_date + timedelta(days=day_offset)
-        date_str = search_date.strftime("%Y-%m-%d")
-        search_dates.append(date_str)
-        if connections_only:
-            tasks.append(
-                aviasales_api.search_prices_for_dates(
-                    origin=origin,
-                    destination=destination,
-                    depart_date=date_str,
-                    return_date=None,
-                    one_way=True,
-                    direct=False,
-                    limit=30,
-                    unique=False,
-                    sorting="price",
-                )
-            )
-        else:
-            tasks.append(
-                aviasales_api.search_direct_on_date(
-                    origin=origin,
-                    destination=destination,
-                    depart_date=date_str,
-                )
-            )
-
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    all_tickets = await aviasales_api.search_cheapest_in_window(
+        origin, destination, start_date=start_date, days=max(1, horizon_days),
+    )
 
     tickets = []
-    for date_str, day_result in zip(search_dates, results):
-        if isinstance(day_result, Exception):
-            logger.error("No-date search failed for %s-%s on %s: %s", origin, destination, date_str, day_result)
+    for ticket in all_tickets:
+        if connections_only and ticket.get("transfers", 0) <= 0:
             continue
-        if not isinstance(day_result, list):
-            continue
-
-        for ticket in day_result:
-            if "value" in ticket and "price" not in ticket:
-                ticket["price"] = ticket["value"]
-            if "depart_date" in ticket and "departure_at" not in ticket:
-                ticket["departure_at"] = ticket["depart_date"]
-            if not ticket.get("departure_at"):
-                ticket["departure_at"] = date_str
-            if "return_date" in ticket and "return_at" not in ticket:
-                ticket["return_at"] = ticket["return_date"]
-            if "number_of_changes" in ticket and "transfers" not in ticket:
-                ticket["transfers"] = ticket["number_of_changes"]
-            if connections_only and ticket.get("transfers", 0) <= 0:
-                continue
-
-            ticket.setdefault("origin", origin)
-            ticket.setdefault("destination", destination)
-            ticket.setdefault("price", ticket.get("value", 0))
-            ticket.setdefault("transfers", 0)
-            ticket["inline_day_label"] = _build_inline_day_label(ticket["departure_at"], start_date)
-            tickets.append(ticket)
+        ticket["inline_day_label"] = _build_inline_day_label(ticket["departure_at"], start_date)
+        tickets.append(ticket)
 
     return tickets
 
@@ -312,10 +262,11 @@ async def _handle_route_search(inline_query: InlineQuery, parsed, offset: int):
 
     # Сортировка
     if not parsed.depart_date:
+        # Без даты: ранжирование от самых дешёвых
         tickets.sort(
             key=lambda t: (
-                t.get("departure_at") or t.get("depart_date", ""),
                 t.get("price", float("inf")),
+                t.get("departure_at") or t.get("depart_date", ""),
             )
         )
     else:
