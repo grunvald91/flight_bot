@@ -23,6 +23,11 @@ class FastBrowseStates(StatesGroup):
     choosing_date = State()
 
 
+class MonthSearchStates(StatesGroup):
+    choosing_origin = State()
+    choosing_destination = State()
+
+
 class MultiTransportStates(StatesGroup):
     choosing_origin = State()
     choosing_destination = State()

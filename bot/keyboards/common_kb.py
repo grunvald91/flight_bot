@@ -203,6 +203,7 @@ def main_menu_keyboard(user_id: int | None = None) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🟣 Билеты через Туту", callback_data="tutu:start")],
         [InlineKeyboardButton(text="🧭 Поездка целиком", callback_data="travel:start")],
         [InlineKeyboardButton(text="⚡ Дешёвые за границу", callback_data="menu:browse")],
+        [InlineKeyboardButton(text="📅 Дешёвые на месяц", callback_data="menu:month")],
         [InlineKeyboardButton(text="🌍 Подробный поиск", callback_data="menu:discover")],
         [InlineKeyboardButton(text="👤 Данные пассажира", callback_data="profile:open")],
         [InlineKeyboardButton(text="⭐ Избранные маршруты", callback_data="menu:favorites")],

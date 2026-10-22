@@ -8,7 +8,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.types import BotCommand
 
 from bot.config import BOT_TOKEN
-from bot.handlers import admin, browse, calendar, common, discover, entry, inline_mode, favorites, history, profile, subscriptions, search, stats, settings, travel, tutu
+from bot.handlers import admin, browse, calendar, common, discover, entry, inline_mode, favorites, history, month, profile, subscriptions, search, stats, settings, travel, tutu
 from bot.middlewares.logging_mw import RequestLoggingMiddleware
 from bot.services.city_resolver import city_resolver
 from bot.services.scheduler import setup_scheduler
@@ -43,6 +43,7 @@ async def main():
             BotCommand(command="travel", description="Транспорт, отели и поездка целиком"),
             BotCommand(command="discover", description="Куда дешевле за границу"),
             BotCommand(command="browse", description="Быстрый обзор цен Aviasales"),
+            BotCommand(command="month", description="Дешёвые билеты на месяц по направлению"),
             BotCommand(command="profile", description="Защищённый профиль пассажира"),
             BotCommand(command="favorites", description="Избранные маршруты"),
             BotCommand(command="subscriptions", description="Слежение за ценой"),
@@ -72,6 +73,7 @@ async def main():
     dp.include_router(discover.router)
     dp.include_router(entry.router)
     dp.include_router(browse.router)
+    dp.include_router(month.router)
     dp.include_router(search.router)
     dp.include_router(favorites.router)
     dp.include_router(history.router)

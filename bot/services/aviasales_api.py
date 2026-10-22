@@ -495,6 +495,74 @@ class AviasalesAPI:
         unique.sort(key=lambda t: t.get("departure_at", ""))
         return unique
 
+    async def search_cheapest_in_window(
+        self,
+        origin: str,
+        destination: str,
+        start_date=None,
+        days: int = 30,
+    ) -> list[dict]:
+        """
+        Все найденные билеты по направлению на ближайшие `days` дней (по умолчанию месяц),
+        отсортированные от самых дешёвых к самым дорогим.
+        Окно может задевать два календарных месяца, поэтому запрашиваем каждый месяц окна
+        одним запросом (departure_at=YYYY-MM) и отрезаем лишние даты.
+        """
+        import asyncio as _aio
+
+        if start_date is None:
+            start_date = datetime.now().date()
+        end_date = start_date + timedelta(days=days)
+
+        months = []
+        cursor = start_date.replace(day=1)
+        while cursor <= end_date:
+            months.append(cursor.strftime("%Y-%m"))
+            cursor = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+        tasks = [
+            self.search_prices_for_dates(
+                origin=origin, destination=destination, depart_date=month,
+                one_way=True, direct=False, limit=1000, unique=False, sorting="price",
+            )
+            for month in months
+        ]
+        results = await _aio.gather(*tasks, return_exceptions=True)
+
+        start_str = start_date.strftime("%Y-%m-%d")
+        end_str = end_date.strftime("%Y-%m-%d")
+
+        seen = set()
+        tickets = []
+        for month, res in zip(months, results):
+            if isinstance(res, Exception):
+                logger.error("search_cheapest_in_window %s-%s %s failed: %s", origin, destination, month, res)
+                continue
+            if not isinstance(res, list):
+                continue
+            for t in res:
+                if "value" in t and "price" not in t:
+                    t["price"] = t["value"]
+                if "number_of_changes" in t and "transfers" not in t:
+                    t["transfers"] = t["number_of_changes"]
+                dep = t.get("departure_at") or t.get("depart_date") or ""
+                if not dep or not start_str <= dep[:10] <= end_str:
+                    continue
+                t.setdefault("departure_at", dep)
+                t.setdefault("origin", origin)
+                t.setdefault("destination", destination)
+                t.setdefault("transfers", 0)
+                if not t.get("price"):
+                    continue
+                key = (t["price"], dep[:16], t.get("airline", ""), t["transfers"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                tickets.append(t)
+
+        tickets.sort(key=lambda t: (t["price"], t["departure_at"]))
+        return tickets
+
     async def get_nearby_cheapest(self, origin: str, destination: str, depart_date: str, days: int = 1) -> list[tuple[str, dict]]:
         """Самые дешёвые билеты на соседние даты (±days дней). Возвращает список (date_str, ticket)."""
         base_dt = datetime.strptime(depart_date, "%Y-%m-%d")
