@@ -20,6 +20,7 @@ class InternationalDiscoveryStates(StatesGroup):
 
 class FastBrowseStates(StatesGroup):
     choosing_origin = State()
+    choosing_country = State()
     choosing_date = State()
 
 

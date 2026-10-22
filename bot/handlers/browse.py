@@ -16,6 +16,7 @@ from bot.keyboards.calendar_kb import calendar_keyboard
 from bot.keyboards.common_kb import persistent_menu_keyboard
 from bot.services.aviasales_api import aviasales_api
 from bot.services.city_resolver import city_resolver
+from bot.services.countries import country_label, resolve_country
 from bot.services.discovery_archive import can_open_result, discovery_archive
 from bot.services.fast_browse import (
     PAGE_SIZE, direct_view, load_indicative_destinations, page_options, visible_options,
@@ -46,7 +47,8 @@ async def _start_browse(message: Message, state: FSMContext):
         "<b>⚡ Дешёвые билеты за границу</b>\n\n"
         "Покажу, в какие страны и города сейчас дешевле всего улететь на выбранную дату. "
         "После выбора направления можно открыть билет или посмотреть, нужна ли виза и какие документы нужны.\n\n"
-        "Укажите город вылета, например: <code>Сочи</code> или <code>Москва</code>.",
+        "Укажите город вылета, например: <code>Сочи</code> или <code>Москва</code>. "
+        "Дальше можно выбрать страну прилёта.",
         reply_markup=persistent_menu_keyboard(),
     )
 
@@ -57,13 +59,54 @@ async def browse_origin(message: Message, state: FSMContext):
     if not origin:
         await message.answer("Город не найден. Введите название или IATA-код ещё раз:")
         return
-    await state.update_data(browse_origin=origin)
-    await state.set_state(FastBrowseStates.choosing_date)
+    await state.update_data(browse_origin=origin, browse_country=None)
+    await state.set_state(FastBrowseStates.choosing_country)
     await message.answer(
-        f"Вылет из: <b>{html.escape(city_resolver.get_city_name(origin))}</b>. "
+        f"Вылет из: <b>{html.escape(city_resolver.get_city_name(origin))}</b>.\n\n"
+        "Куда летим? Напишите страну прилёта, например: <code>Турция</code>, "
+        "или нажмите «Все страны».",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="🌍 Все страны", callback_data="brc:any")
+        ]]),
+    )
+
+
+async def _ask_date(message: Message, state: FSMContext, origin: str, country: str | None):
+    await state.update_data(browse_country=country)
+    await state.set_state(FastBrowseStates.choosing_date)
+    where = f" → <b>{html.escape(country_label(country))}</b>" if country else ""
+    await message.answer(
+        f"Вылет из: <b>{html.escape(city_resolver.get_city_name(origin))}</b>{where}. "
         "Выберите дату или введите её как <code>ДД.ММ</code>:",
         reply_markup=calendar_keyboard("browse"),
     )
+
+
+@router.callback_query(F.data == "brc:any", FastBrowseStates.choosing_country)
+async def browse_any_country(callback: CallbackQuery, state: FSMContext):
+    origin = (await state.get_data()).get("browse_origin")
+    if not origin:
+        await callback.answer("Поиск устарел. Начните заново через /browse.", show_alert=True)
+        return
+    await callback.answer()
+    await _ask_date(callback.message, state, origin, None)
+
+
+@router.message(FastBrowseStates.choosing_country)
+async def browse_country(message: Message, state: FSMContext):
+    country = resolve_country((message.text or "").strip())
+    if not country:
+        await message.answer(
+            "Не нашёл такую страну. Напишите название страны (например: <code>Армения</code>) "
+            "или нажмите «Все страны» выше."
+        )
+        return
+    origin = (await state.get_data()).get("browse_origin")
+    if not origin:
+        await state.clear()
+        await message.answer("Поиск устарел. Начните заново через /browse.")
+        return
+    await _ask_date(message, state, origin, country)
 
 
 @router.callback_query(F.data.startswith("caldate:browse:"))
@@ -74,10 +117,13 @@ async def browse_calendar_date(callback: CallbackQuery, state: FSMContext):
     if not origin or not _valid_date(departure_date):
         await callback.answer("Поиск или дата недействительны. Начните заново.", show_alert=True)
         return
+    country = data.get("browse_country")
     await state.clear()
     await callback.message.edit_text(f"Выбрана дата: <b>{_date_label(departure_date)}</b>")
     await callback.answer()
-    await _run_browse(callback.message, origin, departure_date, owner_id=callback.from_user.id)
+    await _run_browse(
+        callback.message, origin, departure_date, owner_id=callback.from_user.id, country=country,
+    )
 
 
 @router.message(FastBrowseStates.choosing_date)
@@ -92,8 +138,9 @@ async def browse_text_date(message: Message, state: FSMContext):
         await state.clear()
         await message.answer("Поиск устарел. Начните заново через /browse.")
         return
+    country = data.get("browse_country")
     await state.clear()
-    await _run_browse(message, origin, departure_date, owner_id=message.from_user.id)
+    await _run_browse(message, origin, departure_date, owner_id=message.from_user.id, country=country)
 
 
 def _valid_date(value: str) -> bool:
@@ -117,7 +164,9 @@ def _stops_label(count: int | None) -> str:
     return "без пересадок" if count == 0 else f"пересадок: {count}"
 
 
-async def _run_browse(message: Message, origin: str, departure_date: str, *, owner_id: int):
+async def _run_browse(
+    message: Message, origin: str, departure_date: str, *, owner_id: int, country: str | None = None,
+):
     progress = await message.answer(
         "⏳ Собираю все доступные страницы Aviasales. Список появится после завершения сбора."
     )
@@ -127,14 +176,21 @@ async def _run_browse(message: Message, origin: str, departure_date: str, *, own
         logger.exception("Indicative browse source failed")
         await progress.edit_text("Не удалось собрать направления полностью. Попробуйте позже.")
         return
-    if not result.options:
-        await progress.edit_text("Нет зарубежных направлений с ориентировочной ценой на эту дату.")
+    options = result.options
+    if country:
+        options = [option for option in options if option.get("country_code") == country]
+    if not options:
+        await progress.edit_text(
+            f"В {country_label(country)} нет вариантов с ориентировочной ценой на эту дату. "
+            "Попробуйте другую дату или страну."
+            if country else "Нет зарубежных направлений с ориентировочной ценой на эту дату."
+        )
         return
     key = secrets.token_urlsafe(8)
     payload = {
-        "options": result.options,
+        "options": options,
         "meta": {"owner_id": owner_id, "chat_id": message.chat.id,
-                 "origin": origin, "departure_date": departure_date,
+                 "origin": origin, "departure_date": departure_date, "country_code": country,
                  "source_rows": result.source_rows, "unresolved": result.unresolved,
                  "direct_checked": result.direct_checked},
     }
@@ -161,7 +217,9 @@ def _format_page(payload: dict, page: int, direct_only: bool = False) -> str:
     meta = payload["meta"]
     view = visible_options(options, direct_only)
     total_pages = _total_pages(len(view))
-    lines = [f"<b>⚡ Зарубежные направления · {_date_label(meta['departure_date'])}</b>"]
+    country = meta.get("country_code")
+    title = f"⚡ {country_label(country)}" if country else "⚡ Зарубежные направления"
+    lines = [f"<b>{html.escape(title)} · {_date_label(meta['departure_date'])}</b>"]
     if direct_only:
         lines.append("✈️ Только без пересадок · цена самого дешёвого прямого рейса")
         if meta.get("direct_checked") is False:

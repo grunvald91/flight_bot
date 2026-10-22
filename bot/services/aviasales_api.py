@@ -500,6 +500,39 @@ class AviasalesAPI:
         unique.sort(key=lambda t: t.get("departure_at", ""))
         return unique
 
+    async def search_destinations_in_month(
+        self,
+        origin: str,
+        month: str,
+        direct: bool = False,
+        limit: int = 1000,
+        max_pages: int = 5,
+    ) -> list[dict]:
+        """Самый дешёвый билет по каждому направлению из города за календарный месяц (YYYY-MM)."""
+        rows: list[dict] = []
+        for page in range(1, max_pages + 1):
+            params = {
+                "origin": origin,
+                "currency": "rub",
+                "sorting": "price",
+                "direct": "true" if direct else "false",
+                "one_way": "true",
+                "unique": "true",
+                "limit": limit,
+                "departure_at": month,
+                "page": page,
+                "token": self.token,
+            }
+            cache_key = f"month-destinations:{origin}:{month}:{int(direct)}:{limit}:{page}"
+            data = await self._cached_request(cache_key, "/aviasales/v3/prices_for_dates", params)
+            if not isinstance(data, dict) or data.get("success") is not True:
+                break
+            page_rows = [row for row in (data.get("data") or []) if isinstance(row, dict)]
+            rows.extend(page_rows)
+            if len(page_rows) < limit:
+                break
+        return rows
+
     async def search_cheapest_in_window(
         self,
         origin: str,

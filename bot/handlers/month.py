@@ -19,6 +19,8 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from bot.keyboards.common_kb import persistent_menu_keyboard
 from bot.services.aviasales_api import aviasales_api
 from bot.services.city_resolver import city_resolver
+from bot.services.countries import country_label, resolve_country
+from bot.services.country_search import search_cheapest_to_country
 from bot.services.search_prefs import load_direct_only, save_direct_only
 from bot.states.search import MonthSearchStates
 from bot.utils.formatters import format_date_short, format_price, format_time, format_transfers
@@ -33,6 +35,8 @@ PAGE_SIZE = 10  # размер страницы выдачи; все билет�
 # Данные кнопок присылает клиент Telegram, поэтому разбираем их строго:
 # ровно три латинские буквы и номер страницы из ASCII-цифр (без «²», переводов строк и т. п.)
 _IATA_RE = re.compile(r"[A-Z]{3}")
+# Направление: IATA-код города (3 буквы) или код страны (2 буквы, поиск по всем её городам)
+_TARGET_RE = re.compile(r"[A-Z]{2,3}")
 _PAGE_RE = re.compile(r"[0-9]{1,4}")
 
 
@@ -55,7 +59,7 @@ async def _start(message: Message, state: FSMContext):
     await message.answer(
         "<b>📅 Дешёвые билеты на месяц</b>\n\n"
         "Покажу все билеты по выбранному направлению на ближайший месяц, "
-        "начиная с самых дешёвых.\n\n"
+        "начиная с самых дешёвых. Направление можно задать городом или целой страной.\n\n"
         "Введите город вылета (название или IATA-код), например: <code>Сочи</code>",
         reply_markup=persistent_menu_keyboard(),
     )
@@ -71,15 +75,21 @@ async def month_origin(message: Message, state: FSMContext):
     await state.set_state(MonthSearchStates.choosing_destination)
     await message.answer(
         f"Вылет из: <b>{html.escape(city_resolver.get_city_name(origin))}</b>\n\n"
-        "Теперь город прибытия:"
+        "Теперь город или страна прибытия, например: <code>Стамбул</code> или <code>Турция</code>:"
     )
 
 
 @router.message(MonthSearchStates.choosing_destination)
 async def month_destination(message: Message, state: FSMContext):
-    destination = city_resolver.resolve((message.text or "").strip())
+    text = (message.text or "").strip()
+    # Название страны проверяем первым: «Грузия» или «Турция» — это поиск по всем городам страны
+    destination = resolve_country(text) or city_resolver.resolve(text)
+    if destination and not _TARGET_RE.fullmatch(destination):
+        destination = None
+    if destination and len(destination) == 2 and resolve_country(text) != destination:
+        destination = None  # двухбуквенный код города нельзя путать с кодом страны
     if not destination:
-        await message.answer("Город не найден. Введите название или IATA-код ещё раз:")
+        await message.answer("Не нашёл такой город или страну. Введите название (или IATA-код города) ещё раз:")
         return
     data = await state.get_data()
     origin = data.get("month_origin")
@@ -110,7 +120,7 @@ def _parse_callback(data: str) -> tuple[str, str, bool, int] | None:
     if len(parts) != 5 or parts[0] != "mo":
         return None
     _, origin, destination, direct, page = parts
-    if not _IATA_RE.fullmatch(origin) or not _IATA_RE.fullmatch(destination):
+    if not _IATA_RE.fullmatch(origin) or not _TARGET_RE.fullmatch(destination):
         return None
     if direct not in ("0", "1") or not _PAGE_RE.fullmatch(page):
         return None
@@ -123,7 +133,7 @@ def _parse_toggle(data: str) -> tuple[str, str, bool] | None:
     if len(parts) != 4 or parts[0] != "mt":
         return None
     _, origin, destination, direct = parts
-    if not _IATA_RE.fullmatch(origin) or not _IATA_RE.fullmatch(destination) or direct not in ("0", "1"):
+    if not _IATA_RE.fullmatch(origin) or not _TARGET_RE.fullmatch(destination) or direct not in ("0", "1"):
         return None
     return origin, destination, direct == "1"
 
@@ -172,7 +182,21 @@ async def cb_month_toggle(callback: CallbackQuery):
     )
 
 
+def _is_country(destination: str) -> bool:
+    return len(destination) == 2
+
+
+def _target_label(destination: str) -> str:
+    if _is_country(destination):
+        return f"{country_label(destination)} (все города)"
+    return city_resolver.get_city_name(destination)
+
+
 async def _load_tickets(origin: str, destination: str, direct_only: bool) -> list[dict]:
+    if _is_country(destination):
+        return await search_cheapest_to_country(
+            origin, destination, days=WINDOW_DAYS, direct_only=direct_only,
+        )
     tickets = await aviasales_api.search_cheapest_in_window(origin, destination, days=WINDOW_DAYS)
     if direct_only:
         tickets = [t for t in tickets if t.get("transfers", 0) == 0]
@@ -180,6 +204,12 @@ async def _load_tickets(origin: str, destination: str, direct_only: bool) -> lis
 
 
 def _line(rank: int, ticket: dict, origin: str, destination: str) -> str:
+    # В поиске по стране у каждого билета свой город прибытия
+    if _is_country(destination):
+        destination = ticket.get("destination") or destination
+        city = f"{html.escape(city_resolver.get_city_name(destination))} · "
+    else:
+        city = ""
     departure = ticket.get("departure_at", "")
     when = format_date_short(departure)
     time = format_time(departure)
@@ -193,7 +223,7 @@ def _line(rank: int, ticket: dict, origin: str, destination: str) -> str:
 
     link = html.escape(aviasales_api.build_ticket_link(ticket, origin, destination, None), quote=True)
     return (
-        f"{rank}. <b>{format_price(ticket['price'])}</b> · {when} · {airline} · {transfers_text}"
+        f"{rank}. <b>{format_price(ticket['price'])}</b> · {city}{when} · {airline} · {transfers_text}"
         f" — <a href=\"{link}\">купить</a>"
     )
 
@@ -234,7 +264,7 @@ async def _render(origin: str, destination: str, direct_only: bool, page: int) -
     period = f"{format_date_short(today.isoformat())} — {format_date_short((today + timedelta(days=WINDOW_DAYS)).isoformat())}"
     header = (
         f"<b>📅 Дешёвые на месяц: {html.escape(city_resolver.get_city_name(origin))}"
-        f" → {html.escape(city_resolver.get_city_name(destination))}</b>\n"
+        f" → {html.escape(_target_label(destination))}</b>\n"
         f"{period} · от дешёвых к дорогим"
     )
     if direct_only:
@@ -245,6 +275,8 @@ async def _render(origin: str, destination: str, direct_only: bool, page: int) -
             "Прямых билетов на ближайший месяц не нашёл. Выключите «Без пересадок», чтобы увидеть все варианты."
             if direct_only
             else "На ближайший месяц билетов по этому направлению не нашёл. Попробуйте другое направление."
+            if not _is_country(destination)
+            else "На ближайший месяц билетов в эту страну не нашёл. Попробуйте другую страну или город."
         )
         return f"{header}\n\n{body}", _keyboard(origin, destination, direct_only, 0, 1)
 
