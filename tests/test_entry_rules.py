@@ -316,3 +316,33 @@ def test_egypt_card_is_not_plain_e_visa():
 
     assert "по прибытии или электронная" in text
     assert "15 дней" in text
+
+
+def _card(code):
+    rule = entry_rules.VERIFIED_COUNTRY_RULES[code]
+    return "\n".join(
+        entry._simple_entry_lines(
+            rule.ordinary_passport, rule.details, stay=rule.stay, verdict=rule.verdict
+        )
+    )
+
+
+def test_second_batch_key_terms():
+    assert "до 30 дней за одну поездку" in _card("JO")
+    assert "90 дней в течение года" in _card("JO")
+    assert "365" in _card("GE")
+    assert "180 дней в течение года" in _card("AM")
+    assert "календарного года" in _card("AZ")
+    assert "24 часов" in _card("RS")
+    assert "Нужно электронное разрешение" in _card("LK")
+    assert "по прибытии" in _card("ID").lower()
+    assert "внутреннего паспорта" in _card("KG")
+    assert "IMUGA" in _card("MV")
+    assert "приостановлены" in _card("CU")
+
+
+def test_visa_free_cards_have_no_false_visa_wording():
+    for code in ("GE", "AM", "AZ", "RS", "MV", "KG", "MA", "TN", "QA", "JO", "CU"):
+        assert _card(code).startswith("✅ <b>Виза не нужна</b>"), code
+    for code in ("LK", "ID"):
+        assert not _card(code).startswith("✅"), code
