@@ -10,14 +10,47 @@ on:
 permissions:
   contents: read
 
+# Два деплоя одновременно не запускаются, и идущий деплой не обрывается на середине
+concurrency:
+  group: deploy-flight-bot
+  cancel-in-progress: false
+
+env:
+  # Единый список файлов: по нему делается резервная копия, загрузка и откат
+  DEPLOY_FILES: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/handlers/common.py,bot/handlers/travel.py,bot/handlers/entry.py,bot/handlers/browse.py,bot/handlers/discover.py,bot/handlers/month.py,bot/keyboards/common_kb.py,bot/states/search.py,bot/services/scheduler.py,bot/services/channel_publisher.py,bot/services/tutu_mcp.py,bot/services/entry_rules.py,bot/services/fast_browse.py,bot/services/discovery_archive.py,bot/services/aviasales_api.py,bot/services/search_prefs.py,database/crud.py,database/database.py,database/models.py,data/kdmid_entry_rules.csv"
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
       - name: Refresh official KDMID entry-rules snapshot
         run: python scripts/fetch_kdmid_entry_rules.py
+
+      - name: Back up files that will be replaced
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 188.120.254.223
+          username: root
+          password: ${{ secrets.FLIGHT_BOT_SSH_PASSWORD }}
+          script: |
+            set -e
+            cd /opt/flight_bot
+            BACKUP_DIR=/opt/flight_bot/.deploy_backups/${{ github.sha }}
+            mkdir -p "$BACKUP_DIR"
+            : > "$BACKUP_DIR/new_files.txt"
+            for f in $(echo "${{ env.DEPLOY_FILES }}" | tr ',' ' '); do
+              if [ -e "$f" ]; then
+                mkdir -p "$BACKUP_DIR/files/$(dirname "$f")"
+                cp -p "$f" "$BACKUP_DIR/files/$f"
+              else
+                echo "$f" >> "$BACKUP_DIR/new_files.txt"
+              fi
+            done
+            echo "Backup: $BACKUP_DIR"
+            echo "New files:"; cat "$BACKUP_DIR/new_files.txt"
 
       - name: Upload changed files
         uses: appleboy/scp-action@v1
@@ -25,21 +58,48 @@ jobs:
           host: 188.120.254.223
           username: root
           password: ${{ secrets.FLIGHT_BOT_SSH_PASSWORD }}
-          source: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/handlers/common.py,bot/handlers/travel.py,bot/handlers/entry.py,bot/handlers/browse.py,bot/handlers/discover.py,bot/keyboards/common_kb.py,bot/states/search.py,bot/services/scheduler.py,bot/services/channel_publisher.py,bot/services/tutu_mcp.py,bot/services/entry_rules.py,bot/services/fast_browse.py,bot/services/discovery_archive.py,data/kdmid_entry_rules.csv"
+          source: ${{ env.DEPLOY_FILES }}
           target: "/opt/flight_bot"
           overwrite: true
 
-      - name: Restart and verify
+      - name: Restart and verify (roll back on failure)
         uses: appleboy/ssh-action@v1
         with:
           host: 188.120.254.223
           username: root
           password: ${{ secrets.FLIGHT_BOT_SSH_PASSWORD }}
-          script_stop: true
           script: |
             cd /opt/flight_bot
-            venv/bin/python -m compileall -q bot database
+            BACKUP_DIR=/opt/flight_bot/.deploy_backups/${{ github.sha }}
+
+            rollback() {
+              echo "!!! $1 — откатываю на прежние файлы"
+              cp -rp "$BACKUP_DIR/files/." /opt/flight_bot/
+              while read -r f; do [ -n "$f" ] && rm -f "/opt/flight_bot/$f"; done < "$BACKUP_DIR/new_files.txt"
+              systemctl restart flight-bot
+              sleep 5
+              systemctl --no-pager --full status flight-bot | head -n 20
+              exit 1
+            }
+
+            venv/bin/python -m compileall -q bot database || rollback "код не компилируется"
+            # Проверяем, что все модули импортируются (ловит отсутствующие файлы), бот при этом не запускается
+            venv/bin/python -c "import bot.main" || rollback "ошибка импорта"
+
+            STARTED_AT=$(date +%s)
             systemctl restart flight-bot
-            sleep 3
-            systemctl is-active --quiet flight-bot
+
+            # Ждём строку «Bot started» из лога: она пишется после миграции БД и загрузки справочников
+            for i in $(seq 1 30); do
+              sleep 2
+              if journalctl -u flight-bot --since "@$STARTED_AT" --no-pager | grep -q "Bot started"; then
+                break
+              fi
+            done
+            journalctl -u flight-bot --since "@$STARTED_AT" --no-pager | grep -q "Bot started" \
+              || rollback "бот не запустился за 60 секунд"
+
+            sleep 5
+            systemctl is-active --quiet flight-bot || rollback "бот упал после запуска"
             systemctl --no-pager --full status flight-bot | head -n 20
+            echo "Deploy OK. Backup kept at $BACKUP_DIR"
