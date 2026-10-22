@@ -1,0 +1,61 @@
+name: Diag browse (temporary)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/diag-browse.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: 188.120.254.223
+          username: root
+          password: ${{ secrets.FLIGHT_BOT_SSH_PASSWORD }}
+          script: |
+            cd /opt/flight_bot
+            echo "== service =="; systemctl is-active flight-bot; git -C . log -1 2>/dev/null | head -1
+            grep -c "def direct_view" bot/services/fast_browse.py
+            echo "== errors in journal (last 40 min) =="
+            journalctl -u flight-bot --since "-40min" --no-pager | grep -i -E "Direct destinations|Indicative browse|Incomplete destination|API error|API request failed" | tail -15
+            echo "== live API check =="
+            D=$(TZ=Europe/Moscow date -d tomorrow +%F)
+            DATE=$D venv/bin/python - <<'PY'
+            import asyncio, os
+            from bot.services.aviasales_api import aviasales_api as api
+            from bot.services.fast_browse import load_indicative_destinations, visible_options
+            D = os.environ["DATE"]
+            async def raw(direct, unique):
+                rows, page = [], 1
+                while True:
+                    data = await api._request("/aviasales/v3/prices_for_dates", {
+                        "origin": "AER", "currency": "rub", "sorting": "price", "direct": direct,
+                        "one_way": "true", "unique": unique, "limit": 1000,
+                        "departure_at": D, "page": page, "token": api.token})
+                    if not isinstance(data, dict) or not data.get("data"):
+                        return rows, data if not isinstance(data, dict) else {k: v for k, v in data.items() if k != "data"}
+                    rows += data["data"]; page += 1
+                    if page > 5: return rows, "page-limit"
+            async def main():
+                print("date", D)
+                for direct, unique in (("false", "true"), ("true", "true"), ("true", "false")):
+                    rows, tail = await raw(direct, unique)
+                    on = [r for r in rows if str(r.get("departure_at", "")).startswith(D)]
+                    print(f"direct={direct} unique={unique}: rows={len(rows)} on_date={len(on)} dest={len({r['destination'] for r in on})} tail={tail}")
+                    if direct == "true" and unique == "true":
+                        for r in on: print("   ", r["destination"], r["price"], r.get("transfers"), r.get("airline"), r.get("departure_at"))
+                res = await load_indicative_destinations("AER", D)
+                print("bot options:", len(res.options), "direct_checked:", res.direct_checked)
+                view = visible_options(res.options, True)
+                print("bot direct view:", len(view))
+                for i, o in view: print("   ", o["destination"], o["city"], o["price"], o["transfers"])
+            asyncio.run(main())
+            PY
