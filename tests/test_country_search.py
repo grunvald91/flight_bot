@@ -328,3 +328,19 @@ async def test_browse_country_without_options_says_so(monkeypatch):
 
     text, _ = message.edits[0]
     assert "нет вариантов" in text
+
+
+@pytest.mark.parametrize("text,code", [
+    ("Гонконг", "HK"), ("Макао", "MO"), ("Палестина", "PS"), ("Македония", "MK"),
+    ("Северная Корея", "KP"), ("Объединённые Арабские Эмираты", "AE"), ("ОАЭ", "AE"),
+    ("Босния", "BA"), ("ЮАР", "ZA"), ("Сейшелы", "SC"), ("ДР Конго", "CD"),
+    ("Южная Корея", "KR"), ("США", "US"), ("Англия", "GB"),
+])
+def test_colloquial_country_names(monkeypatch, text, code):
+    monkeypatch.setattr(
+        city_resolver, "iata_to_country",
+        {f"X{i:02d}": c for i, c in enumerate(
+            ["HK", "MO", "PS", "MK", "KP", "AE", "BA", "ZA", "SC", "CD", "KR", "US", "GB"])},
+    )
+
+    assert countries.resolve_country(text) == code
