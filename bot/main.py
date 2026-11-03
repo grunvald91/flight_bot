@@ -54,6 +54,15 @@ async def main():
     except Exception as exc:
         logger.warning("Could not update Telegram command menu: %s", exc)
 
+    # Restore a neutral profile description; remove a promotional description
+    # that a previous deployment may have left persisted in Telegram.
+    try:
+        await bot.set_my_short_description(
+            short_description="Поиск авиабилетов и маршрутов, сравнение транспорта и отслеживание цен."
+        )
+    except Exception as exc:
+        logger.warning("Could not restore Telegram short description: %s", exc)
+
     dp = Dispatcher()
 
     # Logging middleware — logs all requests to DB
