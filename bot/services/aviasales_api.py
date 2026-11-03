@@ -162,7 +162,8 @@ class AviasalesAPI:
                 page_destinations.add(destination)
             seen_destinations.update(page_destinations)
             results.extend(rows)
-            if not rows:
+            # A short page is the final page; a full page still requires a follow-up.
+            if len(rows) < limit:
                 metadata = data.get("pagination") or data.get("meta") or {}
                 if not isinstance(metadata, dict):
                     raise RuntimeError(f"Incomplete destination discovery: page {page} invalid metadata")
