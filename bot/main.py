@@ -54,6 +54,18 @@ async def main():
     except Exception as exc:
         logger.warning("Could not update Telegram command menu: %s", exc)
 
+    # The short description is visible on the Telegram bot profile, even before /start.
+    try:
+        await bot.set_my_short_description(
+            short_description=(
+                "Бот бесплатен для всех, пока не объявлена стоимость. "
+                "Билеты и услуги партнёров оплачиваются отдельно."
+            ),
+            language_code="ru",
+        )
+    except Exception as exc:
+        logger.warning("Could not update Telegram bot description: %s", exc)
+
     dp = Dispatcher()
 
     # Logging middleware — logs all requests to DB
