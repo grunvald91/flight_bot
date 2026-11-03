@@ -61,7 +61,6 @@ async def main():
                 "Бот бесплатен для всех, пока не объявлена стоимость. "
                 "Билеты и услуги партнёров оплачиваются отдельно."
             ),
-            language_code="ru",
         )
     except Exception as exc:
         logger.warning("Could not update Telegram bot description: %s", exc)
