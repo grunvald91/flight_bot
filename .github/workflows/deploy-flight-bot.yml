@@ -6,6 +6,10 @@ on:
       - main
     paths:
       - ".github/workflows/deploy-flight-bot.yml"
+      - "bot/main.py"
+      - "bot/handlers/common.py"
+      - "bot/handlers/month.py"
+      - "bot/services/aviasales_api.py"
 
 permissions:
   contents: read

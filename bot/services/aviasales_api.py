@@ -1,4 +1,6 @@
 import logging
+import re
+from urllib.parse import parse_qsl, quote_plus, urlsplit
 from datetime import datetime, timedelta
 
 import aiohttp
@@ -160,7 +162,8 @@ class AviasalesAPI:
                 page_destinations.add(destination)
             seen_destinations.update(page_destinations)
             results.extend(rows)
-            if not rows:
+            # A short page is the final page; a full page still requires a follow-up.
+            if len(rows) < limit:
                 metadata = data.get("pagination") or data.get("meta") or {}
                 if not isinstance(metadata, dict):
                     raise RuntimeError(f"Incomplete destination discovery: page {page} invalid metadata")
@@ -409,6 +412,21 @@ class AviasalesAPI:
 
         return unique
 
+    @staticmethod
+    def _trusted_ticket_link(ticket: dict) -> str | None:
+        """Use the offer-specific Aviasales path returned by Travelpayouts, if safe."""
+        raw = ticket.get("link")
+        if not isinstance(raw, str) or not raw.startswith("/") or raw.startswith("//"):
+            return None
+        if any(ch in raw for ch in ("\\", "\r", "\n", "\t", " ")):
+            return None
+        parts = urlsplit(raw)
+        if parts.scheme or parts.netloc or parts.fragment:
+            return None
+        if not re.fullmatch(r"/(?:search/)?[A-Za-z0-9]+", parts.path):
+            return None
+        return "https://www.aviasales.ru" + parts.path + (("?" + parts.query) if parts.query else "")
+
     def build_ticket_link(self, ticket: dict, origin: str, destination: str, depart_date: str | None = None, return_date: str | None = None) -> str:
         """
         Генерация ссылки на билет.
@@ -433,9 +451,12 @@ class AviasalesAPI:
             except (IndexError, ValueError):
                 pass
 
-        link = f"https://www.aviasales.ru/search/{origin}{depart_part}{destination}{return_part}1"
-        if AFFILIATE_MARKER:
-            link += f"?marker={AFFILIATE_MARKER}"
+        # Prefer the supplier link, which points at the specific fare instead of a new search.
+        link = None if depart_date or return_date else self._trusted_ticket_link(ticket)
+        if not link:
+            link = f"https://www.aviasales.ru/search/{origin}{depart_part}{destination}{return_part}1"
+        if AFFILIATE_MARKER and not any(k == "marker" for k, _ in parse_qsl(urlsplit(link).query)):
+            link += ("&" if "?" in link else "?") + "marker=" + quote_plus(AFFILIATE_MARKER)
         return link
 
     def build_search_link(self, origin: str, destination: str, depart_date: str | None = None, return_date: str | None = None) -> str:

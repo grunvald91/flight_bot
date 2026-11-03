@@ -224,7 +224,7 @@ def _line(rank: int, ticket: dict, origin: str, destination: str) -> str:
     link = html.escape(aviasales_api.build_ticket_link(ticket, origin, destination, None), quote=True)
     return (
         f"{rank}. <b>{format_price(ticket['price'])}</b> · {city}{when} · {airline} · {transfers_text}"
-        f" — <a href=\"{link}\">купить</a>"
+        f" — <a href=\"{link}\">проверить на Aviasales</a>"
     )
 
 
