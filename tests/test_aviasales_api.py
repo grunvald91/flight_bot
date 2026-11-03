@@ -88,3 +88,33 @@ def test_overlapping_distinct_pages_fail_closed(api):
     })
     with pytest.raises(RuntimeError, match="overlap"):
         asyncio.run(api.search_destinations_on_date("MOW", "2026-10-01", limit=2))
+
+
+@pytest.mark.parametrize("bad_link", [
+    "https://example.com/search/MOW1011AYT1",
+    "//example.com/search/MOW1011AYT1",
+    "/search/../../redirect",
+    "/search/MOW1011AYT1#external",
+    "/search/MOW1011AYT1\\nHost: evil",
+])
+def test_rejects_untrusted_provider_link(api, bad_link):
+    ticket = {"departure_at": "2026-11-10T08:00:00+03:00", "link": bad_link}
+    assert api.build_ticket_link(ticket, "MOW", "AYT") == "https://www.aviasales.ru/search/MOW1011AYT1"
+
+def test_uses_specific_supplier_offer_link(api):
+    source = "/search/MOW1011AYT1?t=SU123&search_date=03112026"
+    ticket = {"departure_at": "2026-11-10T08:00:00+03:00", "link": source}
+    assert api.build_ticket_link(ticket, "MOW", "AYT") == "https://www.aviasales.ru" + source
+
+def test_provider_link_keeps_query_and_encodes_affiliate_marker(api, monkeypatch):
+    monkeypatch.setitem(api.build_ticket_link.__func__.__globals__, "AFFILIATE_MARKER", "my marker/1")
+    ticket = {"link": "/search/MOW1011AYT1?t=flight123"}
+    assert api.build_ticket_link(ticket, "MOW", "AYT") == (
+        "https://www.aviasales.ru/search/MOW1011AYT1?t=flight123&marker=my+marker%2F1"
+    )
+
+def test_explicit_date_uses_requested_search_instead_of_ticket_deeplink(api):
+    ticket = {"link": "/search/MOW1011AYT1?t=old-fare"}
+    assert api.build_ticket_link(ticket, "MOW", "AYT", "2026-11-11") == (
+        "https://www.aviasales.ru/search/MOW1111AYT1"
+    )
