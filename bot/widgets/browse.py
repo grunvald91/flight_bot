@@ -10,7 +10,9 @@ import math
 import os
 import re
 import zlib
+from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlparse
 
 from aiogram import Dispatcher
@@ -217,7 +219,7 @@ async def _query_result(query: dict, bot) -> tuple[dict, tuple | None]:
     if not isinstance(data, str) or not 1 <= len(data.encode("utf-8")) <= 64:
         return {"ok": 0, "error": "Некорректный запрос"}, None
     parts = data.split(":")
-    if len(parts) not in (3, 4) or parts[0] not in ("b", "v", "c"):
+    if len(parts) not in (3, 4) or parts[0] not in ("b", "t", "v", "c"):
         return {"ok": 0, "error": "Неизвестная команда"}, None
     action, key = parts[:2]
     if not KEY.fullmatch(key):
@@ -227,14 +229,27 @@ async def _query_result(query: dict, bot) -> tuple[dict, tuple | None]:
     payload = discovery_archive.get(key)
     if not payload or not _authorized(payload, user.get("id"), chat.get("id")):
         return {"ok": 0, "error": "Поиск недоступен. Запустите новый."}, None
-    if action == "b" and len(parts) == 4:
+    if action in ("b", "t") and len(parts) == 4:
         page_text, direct_text = parts[2:]
         if not page_text.isascii() or not page_text.isdecimal() or len(page_text) > 3 or direct_text not in ("0", "1"):
             return {"ok": 0, "error": "Некорректная страница"}, None
+        if action == "t" and page_text != "0":
+            return {"ok": 0, "error": "Некорректный фильтр"}, None
         try:
-            return page_data(payload, int(page_text), direct_text == "1"), None
+            result = page_data(payload, int(page_text), direct_text == "1")
         except ValueError:
             return {"ok": 0, "error": "Страница не найдена"}, None
+        if action == "t":
+            # Keep the preference shared with the legacy browse and month handlers.
+            # A DB failure must not prevent a valid widget response.
+            from bot.services.search_prefs import save_direct_only
+            sender = SimpleNamespace(
+                id=user["id"], username=user.get("username"), first_name=user.get("first_name"),
+            )
+            saved = await save_direct_only(sender, direct_text == "1")
+            if not saved:
+                result["preference_saved"] = False
+        return result, None
     if action in ("v", "c") and ((action == "v" and len(parts) == 3) or (action == "c" and len(parts) == 4)):
         direct = action == "c" and parts[3] == "1"
         if action == "c" and parts[3] not in ("0", "1"):
@@ -249,6 +264,12 @@ async def _query_result(query: dict, bot) -> tuple[dict, tuple | None]:
         date = str((payload.get("meta") or {}).get("departure_date") or "")
         if not re.fullmatch(r"[A-Z]{3}", origin) or not re.fullmatch(r"[A-Z]{3}", dest) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
             return {"ok": 0, "error": "Недостаточно данных для проверки"}, None
+        try:
+            travel_date = date.fromisoformat(date)
+        except ValueError:
+            return {"ok": 0, "error": "Некорректная дата"}, None
+        if travel_date < date.today():
+            return {"ok": 0, "error": "Дата вылета прошла. Запустите новый поиск."}, None
         return {"ok": 1, "message": "Проверка через Туту запущена — результат появится в чате."}, (chat["id"], user["id"], origin, dest, date)
     return {"ok": 0, "error": "Некорректная команда"}, None
 
