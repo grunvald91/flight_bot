@@ -1,8 +1,11 @@
 import asyncio
 import logging
+import os
 import sys
 
-from aiogram import Bot, Dispatcher
+from aiogram import Bot
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import BotCommand
@@ -12,6 +15,7 @@ from bot.handlers import admin, browse, calendar, common, discover, entry, inlin
 from bot.middlewares.logging_mw import RequestLoggingMiddleware
 from bot.services.city_resolver import city_resolver
 from bot.services.scheduler import setup_scheduler
+from bot.widgets.browse import WidgetDispatcher, enabled as widgets_enabled
 from database.database import init_db
 
 logging.basicConfig(
@@ -31,9 +35,18 @@ async def main():
     await city_resolver.load()
     logger.info("City resolver loaded: %d cities", len(city_resolver.cities))
 
+    # In beta, polling and widget methods must use the SAME API environment.
+    # This path is opt-in and is never used by the production bot by default.
+    session = None
+    if widgets_enabled() and os.getenv("FLIGHT_BOT_WIDGET_API") == "beta":
+        session = AiohttpSession(api=TelegramAPIServer(
+            base="https://api.telegram.org/beta/bot{token}/test/{method}",
+            file="https://api.telegram.org/file/bot{token}/test/{path}",
+        ))
     bot = Bot(
         token=BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        **({"session": session} if session is not None else {}),
     )
     try:
         await bot.set_my_commands([
@@ -63,7 +76,7 @@ async def main():
     except Exception as exc:
         logger.warning("Could not restore Telegram short description: %s", exc)
 
-    dp = Dispatcher()
+    dp = WidgetDispatcher()
 
     # Logging middleware — logs all requests to DB
     dp.message.middleware(RequestLoggingMiddleware())
@@ -95,7 +108,10 @@ async def main():
     try:
         bot_info = await bot.get_me()
         logger.info("Bot started: @%s", bot_info.username)
-        await dp.start_polling(bot, allowed_updates=["message", "channel_post", "callback_query", "inline_query"])
+        updates = ["message", "channel_post", "callback_query", "inline_query"]
+        if widgets_enabled():
+            updates.append("widget_query")
+        await dp.start_polling(bot, allowed_updates=updates)
     finally:
         scheduler.shutdown(wait=False)
         await bot.session.close()

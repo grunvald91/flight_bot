@@ -10,6 +10,9 @@ on:
       - "bot/handlers/common.py"
       - "bot/handlers/month.py"
       - "bot/services/aviasales_api.py"
+      - "bot/handlers/browse.py"
+      - "bot/services/discovery_archive.py"
+      - "bot/widgets/**"
 
 permissions:
   contents: read
@@ -22,7 +25,7 @@ concurrency:
 env:
   # Единый список файлов: по нему делается резервная копия, загрузка и откат.
   # Правила въезда (entry.py, entry_rules.py) вручную сверяются с источниками, см. VERIFIED_COUNTRY_RULES (21 страна); поиск по стране вместо города, названия стран
-  DEPLOY_FILES: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/handlers/common.py,bot/handlers/travel.py,bot/handlers/entry.py,bot/handlers/browse.py,bot/handlers/discover.py,bot/handlers/month.py,bot/keyboards/common_kb.py,bot/states/search.py,bot/services/scheduler.py,bot/services/channel_publisher.py,bot/services/tutu_mcp.py,bot/services/entry_rules.py,bot/services/fast_browse.py,bot/services/discovery_archive.py,bot/services/aviasales_api.py,bot/services/search_prefs.py,bot/services/countries.py,bot/services/country_search.py,database/crud.py,database/database.py,database/models.py,data/kdmid_entry_rules.csv"
+  DEPLOY_FILES: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/handlers/common.py,bot/handlers/travel.py,bot/handlers/entry.py,bot/handlers/browse.py,bot/handlers/discover.py,bot/handlers/month.py,bot/keyboards/common_kb.py,bot/states/search.py,bot/services/scheduler.py,bot/services/channel_publisher.py,bot/services/tutu_mcp.py,bot/services/entry_rules.py,bot/services/fast_browse.py,bot/services/discovery_archive.py,bot/services/aviasales_api.py,bot/services/search_prefs.py,bot/services/countries.py,bot/services/country_search.py,bot/widgets/__init__.py,bot/widgets/browse.py,bot/widgets/browse.html,database/crud.py,database/database.py,database/models.py,data/kdmid_entry_rules.csv"
 
 jobs:
   deploy:
@@ -87,15 +90,38 @@ jobs:
             cd /opt/flight_bot
             BACKUP_DIR=/opt/flight_bot/.deploy_backups/${{ github.sha }}
 
+            WIDGET_DROPIN=/etc/systemd/system/flight-bot.service.d/60-html-bubbles.conf
+            WIDGET_DROPIN_BACKUP="$BACKUP_DIR/html-bubbles-dropin.bak"
+            WIDGET_DROPIN_CREATED="$BACKUP_DIR/html-bubbles-dropin-created"
+
             rollback() {
               echo "!!! $1 — откатываю на прежние файлы"
               cp -rp "$BACKUP_DIR/files/." /opt/flight_bot/
               while read -r f; do [ -n "$f" ] && rm -f "/opt/flight_bot/$f"; done < "$BACKUP_DIR/new_files.txt"
+              if [ -f "$WIDGET_DROPIN_BACKUP" ]; then
+                cp -p "$WIDGET_DROPIN_BACKUP" "$WIDGET_DROPIN"
+              elif [ -f "$WIDGET_DROPIN_CREATED" ]; then
+                rm -f "$WIDGET_DROPIN"
+              fi
+              systemctl daemon-reload
               systemctl restart flight-bot
               sleep 5
               systemctl --no-pager --full status flight-bot | head -n 20
               exit 1
             }
+
+            # Enable the feature for the real production bot, without editing the
+            # existing service credentials, .env files, or other systemd units.
+            # Keep a separate backup of the drop-in for rollback.
+            install -d -m 755 /etc/systemd/system/flight-bot.service.d
+            if [ -f "$WIDGET_DROPIN" ]; then
+              cp -p "$WIDGET_DROPIN" "$WIDGET_DROPIN_BACKUP"
+            else
+              touch "$WIDGET_DROPIN_CREATED"
+            fi
+            printf '%s\n' '[Service]' 'Environment="FLIGHT_BOT_HTML_BUBBLES=1"' 'Environment="FLIGHT_BOT_WIDGET_API=production"' > "$WIDGET_DROPIN"
+            chmod 644 "$WIDGET_DROPIN"
+            systemctl daemon-reload || rollback "не удалось перечитать конфигурацию systemd"
 
             venv/bin/python -m compileall -q bot database || rollback "код не компилируется"
             # Проверяем, что все модули импортируются (ловит отсутствующие файлы), бот при этом не запускается
@@ -116,5 +142,10 @@ jobs:
 
             sleep 5
             systemctl is-active --quiet flight-bot || rollback "бот упал после запуска"
+            # Verify the *running process* inherited the feature flag, not just
+            # the systemd unit file. Never print environment variables or secrets.
+            MAIN_PID=$(systemctl show -P MainPID flight-bot)
+            [ -n "$MAIN_PID" ] && [ "$MAIN_PID" -gt 0 ] || rollback "не найден процесс flight-bot"
+            grep -azqFx 'FLIGHT_BOT_HTML_BUBBLES=1' "/proc/$MAIN_PID/environ" || rollback "процесс бота не получил флаг HTML bubbles"
             systemctl --no-pager --full status flight-bot | head -n 20
-            echo "Deploy OK. Backup kept at $BACKUP_DIR"
+            echo "Deploy OK; HTML bubbles enabled. Backup kept at $BACKUP_DIR"
