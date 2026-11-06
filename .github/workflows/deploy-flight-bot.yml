@@ -90,15 +90,38 @@ jobs:
             cd /opt/flight_bot
             BACKUP_DIR=/opt/flight_bot/.deploy_backups/${{ github.sha }}
 
+            WIDGET_DROPIN=/etc/systemd/system/flight-bot.service.d/60-html-bubbles.conf
+            WIDGET_DROPIN_BACKUP="$BACKUP_DIR/html-bubbles-dropin.bak"
+            WIDGET_DROPIN_CREATED="$BACKUP_DIR/html-bubbles-dropin-created"
+
             rollback() {
               echo "!!! $1 — откатываю на прежние файлы"
               cp -rp "$BACKUP_DIR/files/." /opt/flight_bot/
               while read -r f; do [ -n "$f" ] && rm -f "/opt/flight_bot/$f"; done < "$BACKUP_DIR/new_files.txt"
+              if [ -f "$WIDGET_DROPIN_BACKUP" ]; then
+                cp -p "$WIDGET_DROPIN_BACKUP" "$WIDGET_DROPIN"
+              elif [ -f "$WIDGET_DROPIN_CREATED" ]; then
+                rm -f "$WIDGET_DROPIN"
+              fi
+              systemctl daemon-reload
               systemctl restart flight-bot
               sleep 5
               systemctl --no-pager --full status flight-bot | head -n 20
               exit 1
             }
+
+            # Enable the feature for the real production bot, without editing the
+            # existing service credentials, .env files, or other systemd units.
+            # Keep a separate backup of the drop-in for rollback.
+            install -d -m 755 /etc/systemd/system/flight-bot.service.d
+            if [ -f "$WIDGET_DROPIN" ]; then
+              cp -p "$WIDGET_DROPIN" "$WIDGET_DROPIN_BACKUP"
+            else
+              touch "$WIDGET_DROPIN_CREATED"
+            fi
+            printf '[Service]\\nEnvironment="FLIGHT_BOT_HTML_BUBBLES=1"\\nEnvironment="FLIGHT_BOT_WIDGET_API=production"\\n' > "$WIDGET_DROPIN"
+            chmod 644 "$WIDGET_DROPIN"
+            systemctl daemon-reload || rollback "не удалось перечитать конфигурацию systemd"
 
             venv/bin/python -m compileall -q bot database || rollback "код не компилируется"
             # Проверяем, что все модули импортируются (ловит отсутствующие файлы), бот при этом не запускается
@@ -119,5 +142,11 @@ jobs:
 
             sleep 5
             systemctl is-active --quiet flight-bot || rollback "бот упал после запуска"
+            # Verify the *running process* inherited the feature flag, not just
+            # the systemd unit file. Never print environment variables or secrets.
+            MAIN_PID=$(systemctl show -P MainPID flight-bot)
+            [ -n "$MAIN_PID" ] && [ "$MAIN_PID" -gt 0 ] || rollback "не найден процесс flight-bot"
+            tr '\\000' '\\n' < "/proc/$MAIN_PID/environ" | grep -qx 'FLIGHT_BOT_HTML_BUBBLES=1' \\
+              || rollback "процесс бота не получил флаг HTML bubbles"
             systemctl --no-pager --full status flight-bot | head -n 20
-            echo "Deploy OK. Backup kept at $BACKUP_DIR"
+            echo "Deploy OK; HTML bubbles enabled. Backup kept at $BACKUP_DIR"
