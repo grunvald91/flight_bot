@@ -12,6 +12,7 @@ from bot.handlers import admin, browse, calendar, common, discover, entry, inlin
 from bot.middlewares.logging_mw import RequestLoggingMiddleware
 from bot.services.city_resolver import city_resolver
 from bot.services.scheduler import setup_scheduler
+from bot.widgets.browse import WidgetDispatcher, enabled as widgets_enabled
 from database.database import init_db
 
 logging.basicConfig(
@@ -63,7 +64,7 @@ async def main():
     except Exception as exc:
         logger.warning("Could not restore Telegram short description: %s", exc)
 
-    dp = Dispatcher()
+    dp = WidgetDispatcher()
 
     # Logging middleware — logs all requests to DB
     dp.message.middleware(RequestLoggingMiddleware())
@@ -95,7 +96,10 @@ async def main():
     try:
         bot_info = await bot.get_me()
         logger.info("Bot started: @%s", bot_info.username)
-        await dp.start_polling(bot, allowed_updates=["message", "channel_post", "callback_query", "inline_query"])
+        updates = ["message", "channel_post", "callback_query", "inline_query"]
+        if widgets_enabled():
+            updates.append("widget_query")
+        await dp.start_polling(bot, allowed_updates=updates)
     finally:
         scheduler.shutdown(wait=False)
         await bot.session.close()
