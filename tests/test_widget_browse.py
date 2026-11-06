@@ -230,3 +230,28 @@ async def test_unknown_aiogram_update_field_is_handled(monkeypatch):
     result = await dp.feed_update(SimpleNamespace(), update)
     assert result is True
     assert calls and calls[0]["data"] == "b:key:0:0"
+
+
+@pytest.mark.asyncio
+async def test_long_unicode_visa_answer_fits_1024_utf8_bytes(monkeypatch):
+    from bot.services import entry_rules
+
+    async def rich_rule(country, code):
+        return SimpleNamespace(
+            country="🌍" * 50, ordinary_passport="🌍" * 700,
+            stay="🌍" * 400, details="🌍" * 500,
+            source_url="https://www.kdmid.ru/" + "x" * 150,
+            updated_at="2026-11-06",
+        )
+
+    monkeypatch.setattr(entry_rules, "find_entry_rule", rich_rule)
+    answer = await widgets._visa(example(), {"country": "Турция", "country_code": "TR"})
+    assert answer["ok"] == 1
+    assert len(widgets._encode(answer).encode("utf-8")) <= 1024
+
+
+@pytest.mark.asyncio
+async def test_invalid_widget_api_setting_fails_safe(monkeypatch):
+    monkeypatch.setenv("FLIGHT_BOT_WIDGET_API", "unexpected")
+    response = await widgets._api(SimpleNamespace(token="unused"), "sendWidget", {})
+    assert response is None
