@@ -1,12 +1,17 @@
 """Tests for gated Telegram 10.4 browse widget. No Telegram network required."""
 import json
 import zlib
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
 
 from bot.services.discovery_archive import DiscoveryArchive
 from bot.widgets import browse as widgets
+
+
+def future_date():
+    return (date.today() + timedelta(days=30)).isoformat()
 
 
 def example():
@@ -20,7 +25,7 @@ def example():
              "transfers": 0},
         ],
         "meta": {"owner_id": 42, "chat_id": 42, "origin": "MOW",
-                 "departure_date": "2026-12-03", "country_code": None,
+                 "departure_date": future_date(), "country_code": None,
                  "direct_checked": True},
     }
 
@@ -127,7 +132,7 @@ async def test_valid_verification_job_only_for_owner(monkeypatch):
     base = {"from": {"id": 42}, "chat": {"id": 42}, "data": "c:key:0:1"}
     result, job = await widgets._query_result(base, None)
     assert result["ok"] == 1
-    assert job == (42, 42, "MOW", "IST", "2026-12-03")
+    assert job == (42, 42, "MOW", "IST", future_date())
 
 
 @pytest.mark.asyncio
@@ -145,3 +150,83 @@ async def test_answer_query_does_not_schedule_job_if_answer_failed(monkeypatch):
 
 async def _no_result():
     return None
+
+
+@pytest.mark.asyncio
+async def test_filter_toggle_persists_setting_but_paging_does_not(monkeypatch):
+    from bot.services import search_prefs
+
+    calls = []
+
+    async def save(user, value):
+        calls.append((user.id, value))
+        return True
+
+    monkeypatch.setattr(search_prefs, "save_direct_only", save)
+    monkeypatch.setattr(widgets, "discovery_archive", SimpleNamespace(get=lambda key: example()))
+    q = {"from": {"id": 42, "first_name": "Test"}, "chat": {"id": 42}}
+
+    toggled, job = await widgets._query_result({**q, "data": "t:key:0:1"}, None)
+    assert toggled["ok"] == 1
+    assert toggled["d"] == 1
+    assert job is None
+    assert calls == [(42, True)]
+
+    paged, job = await widgets._query_result({**q, "data": "b:key:0:0"}, None)
+    assert paged["ok"] == 1
+    assert calls == [(42, True)], "Paging must not write user preferences"
+
+    invalid, _ = await widgets._query_result({**q, "data": "t:key:1:1"}, None)
+    assert invalid["ok"] == 0
+
+
+@pytest.mark.asyncio
+async def test_filter_toggle_handles_setting_store_failure(monkeypatch):
+    from bot.services import search_prefs
+
+    async def fail_save(user, value):
+        return False
+
+    monkeypatch.setattr(search_prefs, "save_direct_only", fail_save)
+    monkeypatch.setattr(widgets, "discovery_archive", SimpleNamespace(get=lambda key: example()))
+    q = {"from": {"id": 42}, "chat": {"id": 42}, "data": "t:key:0:1"}
+    answer, job = await widgets._query_result(q, None)
+    assert answer["ok"] == 1
+    assert answer["preference_saved"] is False
+    assert job is None
+
+
+@pytest.mark.asyncio
+async def test_stale_widget_does_not_search_past_departure(monkeypatch):
+    payload = example()
+    payload["meta"]["departure_date"] = "2000-01-01"
+    monkeypatch.setattr(widgets, "discovery_archive", SimpleNamespace(get=lambda key: payload))
+    q = {"from": {"id": 42}, "chat": {"id": 42}, "data": "c:key:0:0"}
+    answer, job = await widgets._query_result(q, None)
+    assert answer["ok"] == 0
+    assert "прошла" in answer["error"]
+    assert job is None
+
+
+@pytest.mark.asyncio
+async def test_unknown_aiogram_update_field_is_handled(monkeypatch):
+    from aiogram.types import Update
+
+    calls = []
+
+    async def handler(bot, query):
+        calls.append(query)
+
+    monkeypatch.setattr(widgets, "enabled", lambda: True)
+    monkeypatch.setattr(widgets, "handle_widget_query", handler)
+    update = Update.model_validate({
+        "update_id": 101,
+        "widget_query": {
+            "id": "q101", "from": {"id": 42}, "chat": {"id": 42},
+            "message_id": 123, "data": "b:key:0:0",
+        },
+    })
+    dp = widgets.WidgetDispatcher()
+    result = await dp.feed_update(SimpleNamespace(), update)
+    assert result is True
+    assert calls and calls[0]["data"] == "b:key:0:0"
