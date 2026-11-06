@@ -121,7 +121,7 @@ async def _api(bot, method: str, params: dict) -> dict | None:
             else "https://api.telegram.org/bot")
     suffix = ("/test/" if api == "beta" else "/") + method
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=12)) as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=6 if method == "answerWidgetQuery" else 12)) as session:
             async with session.post(base + bot.token + suffix, json=params) as response:
                 result = await response.json(content_type=None)
         if not result.get("ok"):
@@ -167,7 +167,7 @@ async def _visa(payload: dict, item: dict) -> dict:
     if not re.fullmatch(r"[A-Z]{2}", country_code):
         return {"ok": 0, "error": "Страна не определена"}
     try:
-        rule = await asyncio.wait_for(find_entry_rule(country, country_code), timeout=9)
+        rule = await asyncio.wait_for(find_entry_rule(country, country_code), timeout=7)
     except Exception:
         logger.warning("Entry rules unavailable for %s", country_code, exc_info=True)
         return {"ok": 0, "error": "Не удалось получить правила. Проверьте сайт МИД РФ."}
