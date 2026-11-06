@@ -75,7 +75,7 @@ function harness(chatData = JSON.stringify({ k: 'abc' })) {
   nodes.detail.children[2].children[1].click();
   nodes.detail.children[2].children[2].click();
   await nodes.direct.click();
-  assert.ok(calls.includes('b:abc:0:1'), 'Direct-only request');
+  assert.ok(calls.includes('t:abc:0:1'), 'Direct-only request');
   assert.equal(nodes.list.children.length, 1, 'Filtered rows');
   assert.equal(nodes.list.children[0].children[1].textContent.startsWith('≈'), true, 'Indicative price');
   const forwarded = harness(null);
