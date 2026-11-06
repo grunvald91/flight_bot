@@ -113,12 +113,14 @@ def _selection(payload: dict, raw_index: str, direct: bool = False) -> dict | No
     return direct_view(option) if direct else option
 
 
-async def _api(bot, method: str, params: dict) -> dict | None:
+async def _api(bot, method: str, params: dict, *, errors: list | None = None) -> dict | None:
     """Use the verified Bot API 10.4 method names; never log URLs with tokens."""
     import aiohttp
     api = os.getenv("FLIGHT_BOT_WIDGET_API", "production")
     if api not in ("production", "beta"):
         logger.warning("Unknown FLIGHT_BOT_WIDGET_API value; using plain Telegram output")
+        if errors is not None:
+            errors.append("Настроено неизвестное окружение Telegram API")
         return None
     base = ("https://api.telegram.org/beta/bot" if api == "beta"
             else "https://api.telegram.org/bot")
@@ -128,13 +130,44 @@ async def _api(bot, method: str, params: dict) -> dict | None:
             async with session.post(base + bot.token + suffix, json=params) as response:
                 result = await response.json(content_type=None)
         if not result.get("ok"):
-            logger.warning("Widget API %s failed: %s", method, result.get("description", "unknown"))
+            description = str(result.get("description") or "unknown")[:150]
+            code = result.get("error_code") or response.status
+            logger.warning("Widget API %s failed: HTTP %s %s", method, code, description)
+            if errors is not None:
+                errors.append(f"HTTP {code}: {description}")
             return None
         return result
     except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
         # aiohttp exceptions may contain the entire token-bearing request URL.
         logger.warning("Widget API %s unavailable (%s)", method, type(exc).__name__)
+        if errors is not None:
+            errors.append(f"Ошибка подключения: {type(exc).__name__}")
         return None
+
+
+async def probe_widget_api(bot) -> str:
+    """Non-delivering capability probe: no chat_id, so no message can be sent.
+
+    404 Not Found means the public endpoint does not yet expose sendWidget;
+    400 missing chat_id means the method is recognized by that endpoint.
+    """
+    errors: list[str] = []
+    await _api(bot, "sendWidget", {"html": "<html><body>test</body></html>"}, errors=errors)
+    return errors[0] if errors else "Метод принят (неожиданный ответ)"
+
+
+async def test_widget_delivery(bot, chat_id: int) -> tuple[bool, str]:
+    """Explicit test requested by a Telegram user in their private chat."""
+    errors: list[str] = []
+    result = await _api(bot, "sendWidget", {
+        "chat_id": chat_id,
+        "html": '<html><head><meta charset="utf-8"></head><body>'
+                '<main style="padding:16px;font:16px system-ui">'
+                '✅ HTML bubble отображается</main></body></html>',
+        "width": 320, "height": 120,
+        "caption": "🧪 Проверка HTML bubbles",
+    }, errors=errors)
+    return result is not None, (errors[0] if errors else "")
 
 
 def _template() -> str:

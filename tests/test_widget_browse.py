@@ -255,3 +255,32 @@ async def test_invalid_widget_api_setting_fails_safe(monkeypatch):
     monkeypatch.setenv("FLIGHT_BOT_WIDGET_API", "unexpected")
     response = await widgets._api(SimpleNamespace(token="unused"), "sendWidget", {})
     assert response is None
+
+
+@pytest.mark.asyncio
+async def test_widget_method_probe_does_not_send_to_chat(monkeypatch):
+    async def fake_api(bot, method, params, *, errors=None):
+        assert method == "sendWidget"
+        assert "chat_id" not in params
+        assert "html" in params
+        errors.append("HTTP 404: Not Found")
+        return None
+
+    monkeypatch.setattr(widgets, "_api", fake_api)
+    result = await widgets.probe_widget_api(SimpleNamespace(token="not-used"))
+    assert result == "HTTP 404: Not Found"
+
+
+@pytest.mark.asyncio
+async def test_widgettest_reports_delivery_error(monkeypatch):
+    async def fake_api(bot, method, params, *, errors=None):
+        assert method == "sendWidget"
+        assert params["chat_id"] == 42
+        assert "html" in params
+        errors.append("HTTP 404: Not Found")
+        return None
+
+    monkeypatch.setattr(widgets, "_api", fake_api)
+    sent, reason = await widgets.test_widget_delivery(SimpleNamespace(token="not-used"), 42)
+    assert sent is False
+    assert reason == "HTTP 404: Not Found"

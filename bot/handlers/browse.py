@@ -18,7 +18,7 @@ from bot.services.aviasales_api import aviasales_api
 from bot.services.city_resolver import city_resolver
 from bot.services.countries import country_label, resolve_country
 from bot.services.discovery_archive import can_open_result, discovery_archive
-from bot.widgets.browse import send_browse_widget
+from bot.widgets.browse import send_browse_widget, test_widget_delivery, enabled as widget_enabled
 from bot.services.fast_browse import (
     PAGE_SIZE, direct_view, load_indicative_destinations, page_options, visible_options,
 )
@@ -28,6 +28,26 @@ from bot.utils.parsers import _parse_date
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+
+@router.message(Command("widgettest"))
+async def cmd_widgettest(message: Message):
+    """Send a real minimal HTML bubble on demand, or show the actual API error."""
+    if not widget_enabled():
+        await message.answer("🧪 HTML bubbles выключены в настройках бота.")
+        return
+    if message.chat.type != "private":
+        await message.answer("🧪 Запустите /widgettest в личном чате бота.")
+        return
+    success, error = await test_widget_delivery(message.bot, message.chat.id)
+    if success:
+        await message.answer("✅ Telegram API принял тестовый HTML bubble. Он должен быть виден выше.")
+    else:
+        await message.answer(
+            "⚠️ Telegram API не принял HTML bubble.\n"
+            f"Ответ API: <code>{html.escape(error)}</code>\n"
+            "Это отдельная проверка отправки, без поиска билетов."
+        )
 
 
 @router.message(Command("browse"))
@@ -217,8 +237,15 @@ async def _run_browse(
             ]]),
         )
         return
+    fallback_text = _format_page(payload, 0, direct_only)
+    if widget_enabled() and message.chat.id == owner_id:
+        fallback_text = (
+            "⚠️ Telegram API не отправил HTML-карточку. "
+            "Показываю обычный список. Причину можно проверить командой /widgettest.\n\n"
+            + fallback_text
+        )
     await progress.edit_text(
-        _format_page(payload, 0, direct_only), disable_web_page_preview=True,
+        fallback_text, disable_web_page_preview=True,
         reply_markup=_page_keyboard(key, payload, 0, direct_only),
     )
 
