@@ -118,7 +118,8 @@ async def _api(bot, method: str, params: dict) -> dict | None:
     import aiohttp
     api = os.getenv("FLIGHT_BOT_WIDGET_API", "production")
     if api not in ("production", "beta"):
-        raise ValueError("FLIGHT_BOT_WIDGET_API must be production or beta")
+        logger.warning("Unknown FLIGHT_BOT_WIDGET_API value; using plain Telegram output")
+        return None
     base = ("https://api.telegram.org/beta/bot" if api == "beta"
             else "https://api.telegram.org/bot")
     suffix = ("/test/" if api == "beta" else "/") + method
@@ -189,9 +190,10 @@ async def _visa(payload: dict, item: dict) -> dict:
         summary += "\nСведения: " + str(rule.updated_at)[:25]
     summary += "\nПеред поездкой проверьте действующие правила."
     result = {"ok": 1, "name": _safe_title(rule.country, 50), "summary": summary, "url": url}
-    # External data might be long. Trim without splitting UTF-8 sequences.
-    while len(_encode_unlimited(result).encode("utf-8")) > MAX_STATE_BYTES and len(summary) > 150:
-        summary = summary[:len(summary) - 45]
+    # The Bot API caps the *encoded* UTF-8 answer at 1024 bytes, not characters.
+    # Some country descriptions include long multibyte scripts or escaped text.
+    while len(_encode_unlimited(result).encode("utf-8")) > MAX_STATE_BYTES and summary:
+        summary = summary[: max(0, len(summary) - max(8, len(summary) // 8))]
         result["summary"] = summary
     _encode(result)
     return result
