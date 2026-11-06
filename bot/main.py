@@ -15,7 +15,7 @@ from bot.handlers import admin, browse, calendar, common, discover, entry, inlin
 from bot.middlewares.logging_mw import RequestLoggingMiddleware
 from bot.services.city_resolver import city_resolver
 from bot.services.scheduler import setup_scheduler
-from bot.widgets.browse import WidgetDispatcher, enabled as widgets_enabled
+from bot.widgets.browse import WidgetDispatcher, enabled as widgets_enabled, probe_widget_api
 from database.database import init_db
 
 logging.basicConfig(
@@ -108,6 +108,10 @@ async def main():
     try:
         bot_info = await bot.get_me()
         logger.info("Bot started: @%s", bot_info.username)
+        if widgets_enabled():
+            # Check the actual Bot API method, not the Telegram client version.
+            # The call has no chat_id and therefore cannot deliver a message.
+            logger.info("Widget API probe: %s", await probe_widget_api(bot))
         updates = ["message", "channel_post", "callback_query", "inline_query"]
         if widgets_enabled():
             updates.append("widget_query")
