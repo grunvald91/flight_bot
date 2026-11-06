@@ -41,7 +41,7 @@ async def main():
     if widgets_enabled() and os.getenv("FLIGHT_BOT_WIDGET_API") == "beta":
         session = AiohttpSession(api=TelegramAPIServer(
             base="https://api.telegram.org/beta/bot{token}/test/{method}",
-            file="https://api.telegram.org/file/bot{token}/{path}",
+            file="https://api.telegram.org/file/bot{token}/test/{path}",
         ))
     bot = Bot(
         token=BOT_TOKEN,
