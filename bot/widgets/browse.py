@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 from aiogram import Dispatcher
 from bot.services.discovery_archive import discovery_archive
 from bot.services.fast_browse import direct_view, visible_options
+from bot.services.countries import country_label
 
 logger = logging.getLogger(__name__)
 
@@ -78,9 +79,13 @@ def page_data(payload: dict, page: int, direct_only: bool) -> dict:
             "n": _safe_title(item.get("country")),
             "p": price, "t": _as_stops(item.get("transfers")),
         })
-    title = _safe_title(meta.get("country_code") or "Зарубежные направления", 30)
+    country = meta.get("country_code")
+    title = _safe_title(country_label(country) if isinstance(country, str) and len(country) == 2
+                        else "Зарубежные направления", 30)
     result = {"ok": 1, "p": page, "d": 1 if direct_only else 0,
-              "total": len(view), "pages": pages, "title": title, "rows": rows}
+              "total": len(view), "pages": pages, "title": title, "rows": rows,
+              "date": str(meta.get("departure_date") or "")[:10],
+              "incomplete": bool(direct_only and meta.get("direct_checked") is False)}
     _encode(result)
     return result
 
@@ -123,8 +128,9 @@ async def _api(bot, method: str, params: dict) -> dict | None:
             logger.warning("Widget API %s failed: %s", method, result.get("description", "unknown"))
             return None
         return result
-    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
-        logger.exception("Widget API %s unavailable", method)
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+        # aiohttp exceptions may contain the entire token-bearing request URL.
+        logger.warning("Widget API %s unavailable (%s)", method, type(exc).__name__)
         return None
 
 
@@ -198,7 +204,7 @@ async def _check_ticket(bot, chat_id: int, owner_id: int, origin: str, destinati
     from bot.services.city_resolver import city_resolver
     try:
         message = await bot.send_message(chat_id, "🔎 Проверяю наличие и актуальную цену у Туту…")
-        message.as_(bot)
+        message = message.as_(bot)
         await _run_tutu_search(message, city_resolver.get_city_name(origin),
                                city_resolver.get_city_name(destination), date, owner_id=owner_id)
     except Exception:
@@ -266,7 +272,9 @@ class WidgetDispatcher(Dispatcher):
     """Aiogram 3 keeps unknown 10.4 update fields in model_extra."""
     async def feed_update(self, bot, update, **kwargs):
         extra = getattr(update, "model_extra", None) or {}
-        query = extra.get("widget_query")
+        query = getattr(update, "widget_query", None) or extra.get("widget_query")
+        if hasattr(query, "model_dump"):
+            query = query.model_dump(exclude_none=True)
         if enabled() and isinstance(query, dict):
             await handle_widget_query(bot, query)
             return True
