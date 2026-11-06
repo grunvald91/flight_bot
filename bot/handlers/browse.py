@@ -18,6 +18,7 @@ from bot.services.aviasales_api import aviasales_api
 from bot.services.city_resolver import city_resolver
 from bot.services.countries import country_label, resolve_country
 from bot.services.discovery_archive import can_open_result, discovery_archive
+from bot.widgets.browse import send_browse_widget
 from bot.services.fast_browse import (
     PAGE_SIZE, direct_view, load_indicative_destinations, page_options, visible_options,
 )
@@ -200,8 +201,22 @@ async def _run_browse(
         logger.exception("Could not save indicative browse results")
         await progress.edit_text("Не удалось сохранить результаты. Попробуйте ещё раз.")
         return
-    # Переключатель «Без пересадок» стартует с последнего выбора пользователя
+    # Переключатель «Без пересадок» стартует с последнего выбора пользователя.
     direct_only = await load_direct_only(owner_id)
+    # Beta/10.4 HTML bubbles are opt-in. Always leave a functional text fallback
+    # for clients that do not support the widget media type.
+    if await send_browse_widget(message.bot, message.chat.id, key, payload, direct_only):
+        await progress.edit_text(
+            "⚡ Направления найдены. Интерактивная карточка отправлена ниже.\n"
+            "Если ваш Telegram её не отображает, откройте обычный список:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="📋 Обычная выдача",
+                    callback_data=f"brpage:{key}:0:{int(direct_only)}",
+                )
+            ]]),
+        )
+        return
     await progress.edit_text(
         _format_page(payload, 0, direct_only), disable_web_page_preview=True,
         reply_markup=_page_keyboard(key, payload, 0, direct_only),
