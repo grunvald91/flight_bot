@@ -1,8 +1,11 @@
 import asyncio
 import logging
+import os
 import sys
 
-from aiogram import Bot, Dispatcher
+from aiogram import Bot
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import BotCommand
@@ -32,9 +35,18 @@ async def main():
     await city_resolver.load()
     logger.info("City resolver loaded: %d cities", len(city_resolver.cities))
 
+    # In beta, polling and widget methods must use the SAME API environment.
+    # This path is opt-in and is never used by the production bot by default.
+    session = None
+    if widgets_enabled() and os.getenv("FLIGHT_BOT_WIDGET_API") == "beta":
+        session = AiohttpSession(api=TelegramAPIServer(
+            base="https://api.telegram.org/beta/bot{token}/test/{method}",
+            file="https://api.telegram.org/file/bot{token}/{path}",
+        ))
     bot = Bot(
         token=BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        **({"session": session} if session is not None else {}),
     )
     try:
         await bot.set_my_commands([
