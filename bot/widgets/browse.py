@@ -263,16 +263,16 @@ async def _query_result(query: dict, bot) -> tuple[dict, tuple | None]:
             return await _visa(payload, option), None
         origin = str(option.get("origin") or (payload.get("meta") or {}).get("origin") or "")
         dest = str(option.get("destination") or "")
-        date = str((payload.get("meta") or {}).get("departure_date") or "")
-        if not re.fullmatch(r"[A-Z]{3}", origin) or not re.fullmatch(r"[A-Z]{3}", dest) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        departure_date = str((payload.get("meta") or {}).get("departure_date") or "")
+        if not re.fullmatch(r"[A-Z]{3}", origin) or not re.fullmatch(r"[A-Z]{3}", dest) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", departure_date):
             return {"ok": 0, "error": "Недостаточно данных для проверки"}, None
         try:
-            travel_date = date.fromisoformat(date)
+            travel_date = date.fromisoformat(departure_date)
         except ValueError:
             return {"ok": 0, "error": "Некорректная дата"}, None
         if travel_date < date.today():
             return {"ok": 0, "error": "Дата вылета прошла. Запустите новый поиск."}, None
-        return {"ok": 1, "message": "Проверка через Туту запущена — результат появится в чате."}, (chat["id"], user["id"], origin, dest, date)
+        return {"ok": 1, "message": "Проверка через Туту запущена — результат появится в чате."}, (chat["id"], user["id"], origin, dest, departure_date)
     return {"ok": 0, "error": "Некорректная команда"}, None
 
 
