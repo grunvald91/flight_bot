@@ -148,4 +148,6 @@ jobs:
             [ -n "$MAIN_PID" ] && [ "$MAIN_PID" -gt 0 ] || rollback "не найден процесс flight-bot"
             grep -azqFx 'FLIGHT_BOT_HTML_BUBBLES=1' "/proc/$MAIN_PID/environ" || rollback "процесс бота не получил флаг HTML bubbles"
             systemctl --no-pager --full status flight-bot | head -n 20
+            echo "Telegram Widget API capability (sanitized):"
+            journalctl -u flight-bot --since "@$STARTED_AT" --no-pager -o cat | grep 'Widget API probe:' | tail -n 1 || true
             echo "Deploy OK; HTML bubbles enabled. Backup kept at $BACKUP_DIR"
