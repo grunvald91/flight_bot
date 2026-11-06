@@ -8,12 +8,12 @@ Code: bot/widgets/browse.py and browse.html. Docs:
 
 Off by default. Do not enable on the main production bot before verifying Bot API 10.4 support and running a live staging test.
 
-\`\`\`env
+```env
 FLIGHT_BOT_HTML_BUBBLES=1
 FLIGHT_BOT_WIDGET_API=production
-\`\`\`
+```
 
-Set \`FLIGHT_BOT_WIDGET_API=beta\` only on a separate staging bot. In beta mode aiogram polling and raw widget requests both use \`https://api.telegram.org/beta/bot{token}/test/{method}\`; never mix test and production endpoints. Do not enable two polling instances with the same token.
+Set `FLIGHT_BOT_WIDGET_API=beta` only on a separate staging bot. In beta mode aiogram polling and raw widget requests both use `https://api.telegram.org/beta/bot{token}/test/{method}`; never mix test and production endpoints. Do not enable two polling instances with the same token.
 
 The new response to "⚡ Дешёвые за границу" includes:
 - 4-item pages and stable per-offer index
@@ -27,10 +27,10 @@ No prices are stated as bookable until checked at the ticket provider. Bot never
 
 ## Testing
 
-\`\`\`bash
+```bash
 python -m compileall -q bot tests
 pytest -q tests/test_widget_browse.py tests/test_browse_direct_filter.py tests/test_entry_rules.py
-\`\`\`
+```
 
 A separate staging bot token is needed to test a real HTML bubble. Use a private chat:
 1. Start the bot, choose "⚡ Дешёвые за границу" and complete origin/country/date.
