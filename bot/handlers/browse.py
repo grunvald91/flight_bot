@@ -237,8 +237,15 @@ async def _run_browse(
             ]]),
         )
         return
+    fallback_text = _format_page(payload, 0, direct_only)
+    if widget_enabled() and message.chat.id == owner_id:
+        fallback_text = (
+            "⚠️ Telegram API не отправил HTML-карточку. "
+            "Показываю обычный список. Причину можно проверить командой /widgettest.\n\n"
+            + fallback_text
+        )
     await progress.edit_text(
-        _format_page(payload, 0, direct_only), disable_web_page_preview=True,
+        fallback_text, disable_web_page_preview=True,
         reply_markup=_page_keyboard(key, payload, 0, direct_only),
     )
 
