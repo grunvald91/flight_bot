@@ -187,12 +187,22 @@ class DiscoveryArchive:
             raise ValueError("Browse results require owner and chat scope")
         fields = ("origin", "destination", "city", "country", "country_code", "price",
                   "departure_at", "transfers", "airline", "flight_number", "duration")
+        # Keep the independently priced direct flight. The "direct only" view
+        # uses it even when the cheapest itinerary has connections.
+        options = []
+        for row in payload.get("options", []):
+            if not isinstance(row, dict):
+                continue
+            saved = {name: _scalar(row[name]) for name in fields if name in row}
+            direct = row.get("direct")
+            if isinstance(direct, dict):
+                saved["direct"] = {name: _scalar(direct[name]) for name in fields if name in direct}
+            options.append(saved)
         display = {
-            "options": [{name: _scalar(row[name]) for name in fields if name in row}
-                        for row in payload.get("options", []) if isinstance(row, dict)],
+            "options": options,
             "meta": {"kind": "browse", **{name: _scalar(meta.get(name)) for name in
                      ("owner_id", "chat_id", "origin", "departure_date",
-                      "unresolved", "source_rows")}},
+                      "country_code", "direct_checked", "unresolved", "source_rows")}},
         }
         encoded = json.dumps(display, ensure_ascii=False, allow_nan=False)
         with closing(self._connect()) as conn:
