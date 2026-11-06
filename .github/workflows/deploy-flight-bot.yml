@@ -119,7 +119,7 @@ jobs:
             else
               touch "$WIDGET_DROPIN_CREATED"
             fi
-            printf '[Service]\\nEnvironment="FLIGHT_BOT_HTML_BUBBLES=1"\\nEnvironment="FLIGHT_BOT_WIDGET_API=production"\\n' > "$WIDGET_DROPIN"
+            printf '%s\n' '[Service]' 'Environment="FLIGHT_BOT_HTML_BUBBLES=1"' 'Environment="FLIGHT_BOT_WIDGET_API=production"' > "$WIDGET_DROPIN"
             chmod 644 "$WIDGET_DROPIN"
             systemctl daemon-reload || rollback "не удалось перечитать конфигурацию systemd"
 
@@ -146,7 +146,6 @@ jobs:
             # the systemd unit file. Never print environment variables or secrets.
             MAIN_PID=$(systemctl show -P MainPID flight-bot)
             [ -n "$MAIN_PID" ] && [ "$MAIN_PID" -gt 0 ] || rollback "не найден процесс flight-bot"
-            tr '\\000' '\\n' < "/proc/$MAIN_PID/environ" | grep -qx 'FLIGHT_BOT_HTML_BUBBLES=1' \\
-              || rollback "процесс бота не получил флаг HTML bubbles"
+            grep -azqFx 'FLIGHT_BOT_HTML_BUBBLES=1' "/proc/$MAIN_PID/environ" || rollback "процесс бота не получил флаг HTML bubbles"
             systemctl --no-pager --full status flight-bot | head -n 20
             echo "Deploy OK; HTML bubbles enabled. Backup kept at $BACKUP_DIR"
