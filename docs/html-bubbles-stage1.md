@@ -4,6 +4,15 @@ Code: bot/widgets/browse.py and browse.html. Docs:
 - https://github.com/TelegramMessenger/widget-sandbox/blob/main/docs/tgw-format.md
 - https://github.com/TelegramMessenger/widget-sandbox/blob/main/docs/sdk-v1.md
 
+## Telegram API availability — verified 2026-11-07
+
+- The deployed production bot already has `FLIGHT_BOT_HTML_BUBBLES=1` and `FLIGHT_BOT_WIDGET_API=production` in its systemd drop-in. This enables attempts; it does **not** mean Telegram accepts widgets.
+- Live deploy log of 2026-11-06: `sendWidget` returned **HTTP 404 Not Found**. See [GitHub Actions run 42221686724](https://github.com/grunvald91/flight_bot/actions/runs/42221686724). The ordinary listing remains operational.
+- As checked 2026-11-07, the public [Telegram Bot API changelog](https://core.telegram.org/bots/api) still documents **10.3**, without `sendWidget`. HTML-widget beta parameters are documented in [widget-sandbox](https://github.com/TelegramMessenger/widget-sandbox/blob/main/docs/tgw-format.md), which explicitly reports a beta test on 2026-10-28.
+- The [official Telegram test-environment guide](https://core.telegram.org/bots/features#dedicated-test-environment) states that a test account and a **separate bot created there** are required; a production bot token is not a substitute. The documented test endpoint is `https://api.telegram.org/bot<TOKEN>/test/METHOD_NAME`; widget-sandbox also reports a `/beta/bot<TOKEN>/test/METHOD_NAME` endpoint. Do not silently point the live production bot to either test server.
+- A follow-up safe probe on 2026-11-07 could not read the bot token from the running process/configuration, so it **did not reach Telegram**. Those failed runs are not evidence that beta is unavailable. The temporary probe workflow was removed; production code and service settings were not changed.
+- Release gate: a **real** `sendWidget` response containing a message ID from the intended environment, successful widget rendering in a compatible Telegram client, a delivered `widget_query`, and a valid `answerWidgetQuery`. Until all are verified, don't describe HTML bubbles as working in production.
+
 ## Status and safety
 
 Off by default. Do not enable on the main production bot before verifying Bot API 10.4 support and running a live staging test.
