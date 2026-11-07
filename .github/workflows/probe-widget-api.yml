@@ -34,13 +34,45 @@ jobs:
             ).strip()
             if not pid.isdigit() or pid == "0":
                 raise SystemExit("flight-bot is not running; no API probe made")
-            process_env = Path("/proc/" + pid + "/environ").read_bytes().split(b"\0")
-            token = next(
-                (item.split(b"=", 1)[1].decode("utf-8")
-                 for item in process_env if item.startswith(b"BOT_TOKEN=")), None
-            )
+            import os
+            import re
+            import sys
+
+            # The running process may load dotenv after exec. In that case
+            # /proc/PID/environ does not show the Python-added environment.
+            os.chdir("/opt/flight_bot")
+            sys.path.insert(0, "/opt/flight_bot")
+            try:
+                from bot.config import BOT_TOKEN
+                token = BOT_TOKEN
+            except Exception:
+                token = None
+
             if not token:
-                raise SystemExit("BOT_TOKEN not found in running bot environment")
+                process_env = Path("/proc/" + pid + "/environ").read_bytes().split(b"\0")
+                token = next(
+                    (item.split(b"=", 1)[1].decode("utf-8")
+                     for item in process_env if item.startswith(b"BOT_TOKEN=")), None
+                )
+            if not token:
+                files = subprocess.check_output(
+                    ["systemctl", "show", "-P", "EnvironmentFiles", "flight-bot"],
+                    text=True
+                )
+                for env_path in re.findall(r"(/[^\\s()]+)", files):
+                    try:
+                        rows = Path(env_path).read_text(encoding="utf-8").splitlines()
+                    except OSError:
+                        continue
+                    value = next(
+                        (row.strip().split("=", 1)[1].strip().strip("'\"")
+                         for row in rows if row.strip().startswith("BOT_TOKEN=")), None
+                    )
+                    if value:
+                        token = value
+                        break
+            if not token:
+                raise SystemExit("BOT_TOKEN not available from bot configuration")
 
             payload = json.dumps({"html": "<html><body>non-delivery probe</body></html>"}).encode()
             endpoints = [
