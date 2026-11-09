@@ -331,15 +331,29 @@ async def handle_widget_query(bot, query: dict) -> None:
     if not isinstance(query, dict) or not isinstance(query.get("id"), str):
         return
     try:
-        response, job = await _query_result(query, bot)
+        data = query.get("data") or ""
+        if isinstance(data, str) and data.split(":", 1)[0] in ("of", "od", "oa", "ov"):
+            from bot.widgets.offers import query_result as offer_query_result
+            response, job = await offer_query_result(query)
+            is_offer = True
+        else:
+            response, job = await _query_result(query, bot)
+            is_offer = False
         answer = _encode(response)
     except Exception:
         logger.exception("Widget query handler failed")
         answer, job = _encode({"ok": 0, "error": "Ошибка обработки запроса"}), None
     result = await _api(bot, "answerWidgetQuery", {"widget_query_id": query["id"], "data": answer})
     if result is not None and job:
-        task = asyncio.create_task(_check_ticket(bot, *job))
-        task.add_done_callback(lambda t: logger.error("Widget job failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
+        if is_offer:
+            from bot.widgets.offers import send_offer_actions
+            task = asyncio.create_task(send_offer_actions(bot, *job))
+        else:
+            task = asyncio.create_task(_check_ticket(bot, *job))
+        task.add_done_callback(
+            lambda t: logger.error("Widget job failed: %s", t.exception())
+            if not t.cancelled() and t.exception() else None
+        )
 
 
 class WidgetDispatcher(Dispatcher):
