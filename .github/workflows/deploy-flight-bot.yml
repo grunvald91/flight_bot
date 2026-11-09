@@ -149,5 +149,9 @@ jobs:
             grep -azqFx 'FLIGHT_BOT_HTML_BUBBLES=1' "/proc/$MAIN_PID/environ" || rollback "процесс бота не получил флаг HTML bubbles"
             systemctl --no-pager --full status flight-bot | head -n 20
             echo "Telegram Widget API capability (sanitized):"
-            journalctl -u flight-bot --since "@$STARTED_AT" --no-pager -o cat | grep 'Widget API probe:' | tail -n 1 || true
-            echo "Deploy OK; HTML bubbles enabled. Backup kept at $BACKUP_DIR"
+            WIDGET_PROBE=$(journalctl -u flight-bot --since "@$STARTED_AT" --no-pager -o cat | grep 'Widget API probe:' | tail -n 1 || true)
+            echo "$WIDGET_PROBE"
+            # Probing sendWidget without chat_id must return HTTP 400 (missing chat_id)
+            # after Bot API 10.4; HTTP 404 means the method is still unavailable.
+            echo "$WIDGET_PROBE" | grep -q 'Widget API probe: HTTP 400:' || rollback "Telegram API не поддерживает sendWidget"
+            echo "Deploy OK; HTML bubbles enabled and sendWidget recognized. Backup kept at $BACKUP_DIR"

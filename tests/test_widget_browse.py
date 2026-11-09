@@ -92,7 +92,7 @@ async def test_send_has_initial_data_and_privacy_scope(monkeypatch):
     requests = []
     async def fake_api(bot, method, params):
         requests.append((method, params))
-        return {"ok": True}
+        return {"ok": True, "result": {"message_id": 120, "widget": {"width": 340, "height": 460}}}
     monkeypatch.setattr(widgets, "_api", fake_api)
     assert await widgets.send_browse_widget(SimpleNamespace(token="no-network"), 42, "key", example(), False)
     method, params = requests[0]
@@ -284,3 +284,22 @@ async def test_widgettest_reports_delivery_error(monkeypatch):
     sent, reason = await widgets.test_widget_delivery(SimpleNamespace(token="not-used"), 42)
     assert sent is False
     assert reason == "HTTP 404: Not Found"
+
+
+def test_widget_delivery_is_confirmed_by_api_message_widget():
+    assert widgets._widget_confirmed({"ok": True, "result": {"message_id": 9, "widget": {"width": 300}}})
+    assert not widgets._widget_confirmed({"ok": True})
+    assert not widgets._widget_confirmed({"ok": True, "result": {"message_id": 9}})
+    assert not widgets._widget_confirmed({"ok": False, "result": {"widget": {}}})
+
+
+@pytest.mark.asyncio
+async def test_api_ok_without_widget_falls_back_to_legacy(monkeypatch):
+    monkeypatch.setenv("FLIGHT_BOT_HTML_BUBBLES", "1")
+
+    async def missing_widget(bot, method, params):
+        return {"ok": True, "result": {"message_id": 120}}
+
+    monkeypatch.setattr(widgets, "_api", missing_widget)
+    accepted = await widgets.send_browse_widget(SimpleNamespace(token="unused"), 42, "key", example(), False)
+    assert accepted is False

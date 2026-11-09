@@ -167,7 +167,20 @@ async def test_widget_delivery(bot, chat_id: int) -> tuple[bool, str]:
         "width": 320, "height": 120,
         "caption": "🧪 Проверка HTML bubbles",
     }, errors=errors)
-    return result is not None, (errors[0] if errors else "")
+    if _widget_confirmed(result):
+        logger.info("Telegram accepted the standalone HTML widget test")
+        return True, ""
+    return False, (errors[0] if errors else "В ответе Telegram отсутствует объект widget")
+
+
+def _widget_confirmed(response: dict | None) -> bool:
+    """Bot API 10.4 sendWidget returns Message with a populated Widget field."""
+    return bool(
+        isinstance(response, dict)
+        and response.get("ok") is True
+        and isinstance(response.get("result"), dict)
+        and isinstance(response["result"].get("widget"), dict)
+    )
 
 
 def _template() -> str:
@@ -193,7 +206,12 @@ async def send_browse_widget(bot, chat_id: int, key: str, payload: dict, direct_
         "public_data": snapshot, "chat_data": scope,
         "caption": "⚡ Ориентировочные цены направлений. Если карточка недоступна, используйте обычную выдачу.",
     })
-    return result is not None
+    if _widget_confirmed(result):
+        logger.info("Telegram accepted browse HTML widget; message_id=%s", result["result"].get("message_id"))
+        return True
+    if result is not None:
+        logger.warning("Telegram sendWidget response has no Widget object; using ordinary listing")
+    return False
 
 
 async def _visa(payload: dict, item: dict) -> dict:
