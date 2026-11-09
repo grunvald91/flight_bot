@@ -15,7 +15,12 @@ Code: bot/widgets/browse.py and browse.html. Docs:
 
 ## Status and safety
 
-Off by default. Do not enable on the main production bot before verifying Bot API 10.4 support and running a live staging test.
+Bot API 10.4 was released on 2026-11-09. Official docs:
+- https://core.telegram.org/bots/api#sendwidget
+- https://core.telegram.org/bots/api#answerwidgetquery
+- https://core.telegram.org/bots/widgets
+
+Production scope: **private chats only**; Telegram protects widget messages from forwarding. The server's flight-bot systemd drop-in enables widgets, while the code keeps the feature flag off by default in other environments. Deploy verifies the server recognizes `sendWidget` (HTTP 400 for a deliberate call without `chat_id`); this alone does **not** verify actual delivery or UI interaction. Use `/widgettest` and `/browse` in Telegram for end-to-end checks.
 
 ```env
 FLIGHT_BOT_HTML_BUBBLES=1
@@ -41,12 +46,12 @@ python -m compileall -q bot tests
 pytest -q tests/test_widget_browse.py tests/test_browse_direct_filter.py tests/test_entry_rules.py
 ```
 
-A separate staging bot token is needed to test a real HTML bubble. Use a private chat:
+A private Telegram chat with @a_ticketbot can test live HTML bubbles. First send `/widgettest`, then:
 1. Start the bot, choose "⚡ Дешёвые за границу" and complete origin/country/date.
 2. Compare all destinations to the legacy listing, including pagination.
 3. Toggle "Без пересадок" and confirm no unknown-transfer fare appears as nonstop.
 4. Tap a destination and verify the visa source and checked Tutu offer.
-5. Forward the bubble: its first-page public snapshot must be harmless; private search requests must be unavailable.
+5. On the production API, widgets are protected from forwarding. Do not attempt forwarding as a required test; group and inline widget flows remain test-server-only.
 6. Test a Telegram client without widget support using the "Обычная выдача" button.
 7. Restart the bot and ensure archived results still work (especially direct fare metadata).
 
@@ -56,4 +61,4 @@ A separate staging bot token is needed to test a real HTML bubble. Use a private
 - Widget state/answers <= 1024 UTF-8 bytes; request <= 64 bytes.
 - We do not use shared widgets or automatic background queries in Stage 1.
 - aiogram 3 currently has no native 10.4 widget model. The opt-in dispatcher intercepts unknown update fields without changing existing handlers.
-- A production rollout requires checking official Bot API availability and deployment configuration. The feature flag defaults to off.
+- Production deployment checks the actual method's availability and rolls back on HTTP 404. The feature flag defaults to off.
