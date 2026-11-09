@@ -71,9 +71,11 @@ def test_pages_sorting_and_direct_only():
 
 
 def test_ui_and_payload_under_telegram_limits():
-    html = ow._template().encode()
+    html = Path("bot/widgets/offers.html").read_bytes()
+    compressed = len(zlib.compress(html, 9))
     assert len(html) <= 32768
-    assert len(zlib.compress(html, 9)) <= 4096
+    assert compressed <= 4096, f"HTML widget compressed to {compressed} bytes; limit 4096"
+    assert ow._template().encode() == html
     for kind in ("tutu", "discover"):
         data = sample(kind)
         assert len(ow._encode(ow.page_data(data)).encode("utf-8")) <= 1024
