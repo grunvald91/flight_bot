@@ -111,7 +111,8 @@ def _display_offer(offer: dict, summary: dict | None = None) -> dict:
         "offer_id": offer.get("offer_id"),
         "_source_index": offer.get("_source_index"),
         "price": {"amount": price.get("amount"), "currency": price.get("currency")},
-        "_discovery": {"city": discovery.get("city"), "country": discovery.get("country")},
+        "_discovery": {"city": discovery.get("city"), "country": discovery.get("country"),
+                       "country_code": discovery.get("country_code")},
         "search_results_url": _scalar(offer.get("search_results_url")),
         "review_summary": {"label": review.get("label")},
         "departure_at": offer.get("departure_at"),
@@ -170,7 +171,7 @@ class DiscoveryArchive:
             "offers": [_display_offer(offer, summaries[index] if index < len(summaries) else None)
                        for index, offer in enumerate(payload.get("offers", []))],
             "meta": {name: (payload.get("meta") or {}).get(name)
-                     for name in ("origin", "departure_date", "unverified", "owner_id", "chat_id")},
+                     for name in ("origin", "departure_date", "unverified", "owner_id", "chat_id", "kind")},
         }
         encoded = json.dumps(display, ensure_ascii=False, allow_nan=False)
         with closing(self._connect()) as conn:

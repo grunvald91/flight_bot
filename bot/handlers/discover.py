@@ -11,6 +11,7 @@ from bot.handlers.tutu import _booking_summary, _format_offer, _send_checkout_li
 from bot.keyboards.calendar_kb import calendar_keyboard
 from bot.services.city_resolver import city_resolver
 from bot.services.discovery_archive import can_open_result, discovery_archive
+from bot.widgets.offers import send_offers_widget
 from bot.services.international_discovery import discover_international_offers
 from bot.services.tutu_mcp import tutu_search_cache
 from bot.states.search import InternationalDiscoveryStates
@@ -165,21 +166,28 @@ async def _run_discovery(message: Message, origin: str, departure_date: str,
     search_key = tutu_search_cache.put({
         "offers": offers,
         "meta": {"origin": origin, "departure_date": departure_date,
-                 "unverified": offers.unverified, **scope},
+                 "unverified": offers.unverified, "kind": "discover", **scope},
     })
+    archive_saved = True
     try:
         discovery_archive.put(search_key, {
             "offers": offers,
             "booking_summaries": [_booking_summary(offer) for offer in offers],
             "meta": {"origin": origin, "departure_date": departure_date,
-                     "unverified": offers.unverified, **scope},
+                     "unverified": offers.unverified, "kind": "discover", **scope},
         })
     except Exception:
+        archive_saved = False
         logger.exception("Could not save search results")
         await progress.edit_text(
             f"<b>🌍 Из {html.escape(origin_name)} за границу — {_format_date(departure_date)}</b>\n"
             + coverage_note + "\n⚠️ Не удалось сохранить результаты для просмотра после перезапуска."
         )
+    if archive_saved and await send_offers_widget(
+        message.bot, message.chat.id, search_key,
+        discovery_archive.get(search_key), "discover",
+    ):
+        return
     await message.answer(
         _format_discovery_card(offers[0], 0, len(offers)),
         disable_web_page_preview=True,
