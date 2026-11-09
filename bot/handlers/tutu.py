@@ -14,6 +14,7 @@ from bot.services.tutu_mcp import (
     tutu_search_cache,
 )
 from bot.services.discovery_archive import can_open_result, discovery_archive
+from bot.widgets.offers import send_offers_widget
 from bot.states.search import TutuSearchStates
 from bot.keyboards.calendar_kb import calendar_keyboard
 from bot.utils.formatters import format_price
@@ -154,19 +155,25 @@ async def _run_tutu_search(message: Message, origin: str, destination: str, depa
     scope = {"owner_id": owner_id if owner_id is not None else
              getattr(getattr(message, "from_user", None), "id", None),
              "chat_id": getattr(getattr(message, "chat", None), "id", None)}
-    payload["meta"] = {**meta, **scope}
+    payload["meta"] = {**meta, "kind": "tutu", **scope}
     search_key = tutu_search_cache.put(payload)
     archive_saved = True
     try:
         discovery_archive.put(search_key, {
             "offers": offers,
             "booking_summaries": [_booking_summary(offer) for offer in offers],
-            "meta": {"origin": origin, "departure_date": departure_date, **scope},
+            "meta": {"origin": origin, "departure_date": departure_date,
+                     "kind": "tutu", **scope},
         })
     except Exception:
         archive_saved = False
         logger.exception("Could not archive Tutu results")
     ordered = _sort_offers(offers, "stops")
+    if archive_saved and await send_offers_widget(
+        message.bot, message.chat.id, search_key,
+        discovery_archive.get(search_key), "tutu",
+    ):
+        return
     await message.answer(
         _format_carousel_card(ordered[0], 0, len(ordered), "stops")
         + ("\n⚠️ Не удалось сохранить результат; кнопка может перестать работать после перезапуска."
