@@ -25,7 +25,7 @@ concurrency:
 env:
   # Единый список файлов: по нему делается резервная копия, загрузка и откат.
   # Правила въезда (entry.py, entry_rules.py) вручную сверяются с источниками, см. VERIFIED_COUNTRY_RULES (21 страна); поиск по стране вместо города, названия стран
-  DEPLOY_FILES: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/handlers/common.py,bot/handlers/travel.py,bot/handlers/entry.py,bot/handlers/browse.py,bot/handlers/discover.py,bot/handlers/month.py,bot/keyboards/common_kb.py,bot/states/search.py,bot/services/scheduler.py,bot/services/channel_publisher.py,bot/services/tutu_mcp.py,bot/services/entry_rules.py,bot/services/fast_browse.py,bot/services/discovery_archive.py,bot/services/aviasales_api.py,bot/services/search_prefs.py,bot/services/countries.py,bot/services/country_search.py,bot/widgets/__init__.py,bot/widgets/browse.py,bot/widgets/browse.html,database/crud.py,database/database.py,database/models.py,data/kdmid_entry_rules.csv"
+  DEPLOY_FILES: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/handlers/common.py,bot/handlers/travel.py,bot/handlers/entry.py,bot/handlers/browse.py,bot/handlers/discover.py,bot/handlers/month.py,bot/keyboards/common_kb.py,bot/states/search.py,bot/services/scheduler.py,bot/services/channel_publisher.py,bot/services/tutu_mcp.py,bot/services/entry_rules.py,bot/services/fast_browse.py,bot/services/discovery_archive.py,bot/services/aviasales_api.py,bot/services/search_prefs.py,bot/services/countries.py,bot/services/country_search.py,bot/widgets/__init__.py,bot/widgets/browse.py,bot/widgets/browse.html,bot/widgets/offers.py,bot/widgets/offers.html,database/crud.py,database/database.py,database/models.py,data/kdmid_entry_rules.csv"
 
 jobs:
   deploy:
@@ -125,7 +125,7 @@ jobs:
 
             venv/bin/python -m compileall -q bot database || rollback "код не компилируется"
             # Проверяем, что все модули импортируются (ловит отсутствующие файлы), бот при этом не запускается
-            venv/bin/python -c "import bot.main" || rollback "ошибка импорта"
+            venv/bin/python -c "import bot.main; from bot.widgets.offers import _template; _template()" || rollback "ошибка импорта или размер HTML-карточки"
 
             STARTED_AT=$(date +%s)
             systemctl restart flight-bot
