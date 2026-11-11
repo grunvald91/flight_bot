@@ -211,6 +211,34 @@ class DiscoveryArchive:
                 conn.execute("INSERT OR REPLACE INTO search_archive (key, expires_at, payload) VALUES (?, ?, ?)",
                              (key, 0, encoded))
 
+    def put_month(self, key: str, payload: dict) -> None:
+        """Restart-safe month snapshot; no passenger data or untrusted links."""
+        if not _KEY.fullmatch(key):
+            raise ValueError("Invalid archive key")
+        meta = payload.get("meta") or {}
+        if (type(meta.get("owner_id")) is not int or
+                type(meta.get("chat_id")) is not int or
+                meta["owner_id"] != meta["chat_id"] or
+                meta.get("kind") != "month"):
+            raise ValueError("Month results require a private owner and chat")
+        fields = ("origin", "destination", "price", "departure_at",
+                  "transfers", "airline", "flight_number", "duration")
+        options = []
+        for row in payload.get("options") or []:
+            if isinstance(row, dict):
+                options.append({name: _scalar(row[name]) for name in fields if name in row})
+        display = {
+            "options": options,
+            "meta": {"kind": "month", **{name: _scalar(meta.get(name)) for name in
+                     ("owner_id", "chat_id", "origin", "destination",
+                      "origin_name", "target_name", "start", "days")}},
+        }
+        encoded = json.dumps(display, ensure_ascii=False, allow_nan=False)
+        with closing(self._connect()) as conn:
+            with conn:
+                conn.execute("INSERT OR REPLACE INTO search_archive (key, expires_at, payload) VALUES (?, ?, ?)",
+                             (key, 0, encoded))
+
     def get(self, key: str) -> dict | None:
         if not _KEY.fullmatch(key):
             return None
