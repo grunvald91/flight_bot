@@ -12,6 +12,7 @@ from pathlib import Path
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot.services.discovery_archive import discovery_archive
+from bot.services.city_resolver import city_resolver
 from bot.widgets.browse import (
     KEY, _api, _authorized, _as_price, _as_stops, _encode,
     _safe_title, _widget_confirmed, enabled,
@@ -70,7 +71,9 @@ def _row(item):
     return {
         "i": index, "p": price, "dt": when.isoformat(), "t": transfers,
         "c": _safe_title(ticket.get("airline"), 12),
-        "to": _safe_title(ticket.get("destination"), 3),
+        "to": _safe_title(
+            city_resolver.get_city_name(ticket.get("destination"))
+            if ticket.get("destination") else "", 18),
         "tm": str(ticket.get("departure_at") or "")[11:16] if "T" in str(ticket.get("departure_at") or "") else "",
     }
 
@@ -160,7 +163,7 @@ async def send_month_widget(bot, chat_id: int, key: str, payload: dict, direct: 
         logger.exception("Month widget could not be prepared")
         return False
     result = await _api(bot, "sendWidget", {
-        "chat_id": chat_id, "html": html, "height": 560,
+        "chat_id": chat_id, "html": html, "height": 590,
         "allow_queries": True, "is_shared": False,
         "public_data": initial, "chat_data": _encode({"k": key}),
         "caption": "📅 Самые дешёвые даты по направлению • цены ориентировочные",
