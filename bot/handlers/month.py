@@ -8,6 +8,7 @@
 import html
 import logging
 import re
+import secrets
 from datetime import datetime, timedelta
 
 from aiogram import F, Router
@@ -21,6 +22,8 @@ from bot.services.aviasales_api import aviasales_api
 from bot.services.city_resolver import city_resolver
 from bot.services.countries import country_label, resolve_country
 from bot.services.country_search import search_cheapest_to_country
+from bot.services.discovery_archive import discovery_archive
+from bot.widgets.month import send_month_widget
 from bot.services.search_prefs import load_direct_only, save_direct_only
 from bot.states.search import MonthSearchStates
 from bot.utils.formatters import format_date_short, format_price, format_time, format_transfers
@@ -95,13 +98,42 @@ async def month_destination(message: Message, state: FSMContext):
     origin = data.get("month_origin")
     if not origin:
         await state.clear()
-        await message.answer("Поиск устарел. Начните заново: /month")
+        await message.answer("Поиск устарел. Нажмите кнопку «📅 Дешёвые на месяц» для нового поиска.")
         return
     await state.clear()
 
     progress = await message.answer("⏳ Ищу самые дешёвые билеты на ближайший месяц...")
     # Переключатель «Без пересадок» стартует с последнего выбора пользователя
     direct_only = await load_direct_only(message.from_user.id)
+    # Native HTML bubbles are sent only to the owner in their private chat.
+    # Always fetch the full window so that the widget can toggle direct flights
+    # locally, without re-querying the supplier on every tap.
+    if message.from_user and message.from_user.id == message.chat.id:
+        try:
+            tickets = await _load_tickets(origin, destination, False)
+            if tickets:
+                key = secrets.token_urlsafe(10)
+                payload = {
+                    "options": tickets,
+                    "meta": {
+                        "kind": "month", "owner_id": message.from_user.id,
+                        "chat_id": message.chat.id, "origin": origin,
+                        "destination": destination,
+                        "origin_name": city_resolver.get_city_name(origin),
+                        "target_name": _target_label(destination),
+                        "start": datetime.now().date().isoformat(), "days": WINDOW_DAYS,
+                    },
+                }
+                discovery_archive.put_month(key, payload)
+                saved = discovery_archive.get(key)
+                if await send_month_widget(message.bot, message.chat.id, key, saved, direct_only):
+                    try:
+                        await progress.delete()
+                    except TelegramBadRequest:
+                        pass
+                    return
+        except Exception:
+            logger.exception("Month widget unavailable; retaining classic results")
     text, keyboard = await _render(origin, destination, direct_only=direct_only, page=0)
     try:
         await progress.edit_text(text, reply_markup=keyboard, disable_web_page_preview=True)
@@ -160,7 +192,7 @@ async def _redraw(
 async def cb_month_view(callback: CallbackQuery):
     parsed = _parse_callback(callback.data)
     if not parsed:
-        await callback.answer("Кнопка устарела. Начните заново: /month", show_alert=True)
+        await callback.answer("Кнопка устарела. Нажмите «📅 Дешёвые на месяц»", show_alert=True)
         return
     origin, destination, direct_only, page = parsed
     await _redraw(callback, origin, destination, direct_only, page)
@@ -170,7 +202,7 @@ async def cb_month_view(callback: CallbackQuery):
 async def cb_month_toggle(callback: CallbackQuery):
     parsed = _parse_toggle(callback.data)
     if not parsed:
-        await callback.answer("Кнопка устарела. Начните заново: /month", show_alert=True)
+        await callback.answer("Кнопка устарела. Нажмите «📅 Дешёвые на месяц»", show_alert=True)
         return
     origin, destination, direct_only = parsed
 
@@ -199,7 +231,7 @@ async def _load_tickets(origin: str, destination: str, direct_only: bool) -> lis
         )
     tickets = await aviasales_api.search_cheapest_in_window(origin, destination, days=WINDOW_DAYS)
     if direct_only:
-        tickets = [t for t in tickets if t.get("transfers", 0) == 0]
+        tickets = [t for t in tickets if t.get("transfers") == 0]
     return tickets
 
 
