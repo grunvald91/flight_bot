@@ -336,7 +336,7 @@ async def handle_widget_query(bot, query: dict) -> None:
         data = query.get("data") or ""
         prefix = data.split(":", 1)[0] if isinstance(data, str) else ""
         is_offer = prefix in ("of", "od", "oa", "ov")
-        is_month = prefix in ("ml", "mc", "md", "ma")
+        is_month = prefix in ("ml", "mc", "md", "ma", "mt")
         if is_month:
             from bot.widgets.month import query_result as month_query_result
             response, job = await month_query_result(query)
