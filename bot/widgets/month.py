@@ -8,6 +8,7 @@ import re
 import zlib
 from datetime import date, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -179,7 +180,7 @@ async def query_result(query: dict):
     if not isinstance(data, str) or not 1 <= len(data.encode("utf-8")) <= 64:
         return {"ok": 0, "error": "Некорректный запрос"}, None
     parts = data.split(":")
-    if len(parts) < 3 or parts[0] not in ("ml", "mc", "md", "ma"):
+    if len(parts) < 3 or parts[0] not in ("ml", "mc", "md", "ma", "mt"):
         return {"ok": 0, "error": "Неизвестное действие"}, None
     action, key = parts[:2]
     if not KEY.fullmatch(key):
@@ -206,6 +207,24 @@ async def query_result(query: dict):
                              "price" if sort == "p" else "date", int(day)), None
         except ValueError:
             return {"ok": 0, "error": "Страница недоступна"}, None
+    if action == "mt" and len(parts) == 3 and parts[2] in ("0", "1"):
+        direct = parts[2] == "1"
+        try:
+            result = page_data(payload, 0, direct)
+        except ValueError:
+            return {"ok": 0, "error": "Фильтр недоступен"}, None
+        try:
+            from bot.services.search_prefs import save_direct_only
+            saved = await save_direct_only(SimpleNamespace(
+                id=user["id"], first_name=user.get("first_name"),
+                username=user.get("username"),
+            ), direct)
+            if not saved:
+                result["preference_saved"] = False
+        except Exception:
+            logger.warning("Could not persist monthly direct-only preference", exc_info=True)
+            result["preference_saved"] = False
+        return result, None
     if action == "mc" and len(parts) == 3 and parts[2] in ("0", "1"):
         try:
             return calendar_data(payload, parts[2] == "1"), None
