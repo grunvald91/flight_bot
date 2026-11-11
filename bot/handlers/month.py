@@ -108,7 +108,8 @@ async def month_destination(message: Message, state: FSMContext):
     # Native HTML bubbles are sent only to the owner in their private chat.
     # Always fetch the full window so that the widget can toggle direct flights
     # locally, without re-querying the supplier on every tap.
-    if message.from_user and message.from_user.id == message.chat.id:
+    chat_id = getattr(getattr(message, "chat", None), "id", None)
+    if message.from_user and type(chat_id) is int and message.from_user.id == chat_id:
         try:
             tickets = await _load_tickets(origin, destination, False)
             if tickets:
