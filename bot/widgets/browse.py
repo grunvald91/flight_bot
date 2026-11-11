@@ -332,20 +332,27 @@ async def handle_widget_query(bot, query: dict) -> None:
         return
     try:
         data = query.get("data") or ""
-        if isinstance(data, str) and data.split(":", 1)[0] in ("of", "od", "oa", "ov"):
+        prefix = data.split(":", 1)[0] if isinstance(data, str) else ""
+        is_offer = prefix in ("of", "od", "oa", "ov")
+        is_month = prefix in ("ml", "mc", "md", "ma")
+        if is_month:
+            from bot.widgets.month import query_result as month_query_result
+            response, job = await month_query_result(query)
+        elif is_offer:
             from bot.widgets.offers import query_result as offer_query_result
             response, job = await offer_query_result(query)
-            is_offer = True
         else:
             response, job = await _query_result(query, bot)
-            is_offer = False
         answer = _encode(response)
     except Exception:
         logger.exception("Widget query handler failed")
         answer, job = _encode({"ok": 0, "error": "Ошибка обработки запроса"}), None
     result = await _api(bot, "answerWidgetQuery", {"widget_query_id": query["id"], "data": answer})
     if result is not None and job:
-        if is_offer:
+        if is_month:
+            from bot.widgets.month import send_month_link
+            task = asyncio.create_task(send_month_link(bot, *job))
+        elif is_offer:
             from bot.widgets.offers import send_offer_actions
             task = asyncio.create_task(send_offer_actions(bot, *job))
         else:
