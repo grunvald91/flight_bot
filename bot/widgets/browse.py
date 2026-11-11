@@ -80,6 +80,8 @@ def page_data(payload: dict, page: int, direct_only: bool) -> dict:
             "i": index, "c": _safe_title(item.get("city")),
             "n": _safe_title(item.get("country")),
             "p": price, "t": _as_stops(item.get("transfers")),
+            "a": _safe_title(item.get("airline"), 12),
+            "at": str(item.get("departure_at") or "").replace("T", " ")[:16],
         })
     country = meta.get("country_code")
     title = _safe_title(country_label(country) if isinstance(country, str) and len(country) == 2
@@ -201,7 +203,7 @@ async def send_browse_widget(bot, chat_id: int, key: str, payload: dict, direct_
         logger.exception("Widget payload invalid; using normal message")
         return False
     result = await _api(bot, "sendWidget", {
-        "chat_id": chat_id, "html": html, "width": 340, "height": 460,
+        "chat_id": chat_id, "html": html, "height": 575,
         "allow_queries": True, "is_shared": False,
         "public_data": snapshot, "chat_data": scope,
         "caption": "⚡ Ориентировочные цены направлений. Если карточка недоступна, используйте обычную выдачу.",
