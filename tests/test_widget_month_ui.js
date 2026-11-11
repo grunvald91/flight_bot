@@ -41,7 +41,7 @@ function load(scope=JSON.stringify({k:"monthkey"})){
  assert.ok(calls.includes("ma:monthkey:0"));
  nodes.detail.children[0].children.at(-1).children.at(-1).click();
  await nodes.direct.click();
- assert.ok(calls.includes("ml:monthkey:0:1:p:-1"));
+ assert.ok(calls.includes("mt:monthkey:1"));
  await nodes.calendar.click();
  assert.ok(calls.includes("mc:monthkey:1"));
  assert.equal(nodes.cal.children.length,30);
@@ -50,6 +50,6 @@ function load(scope=JSON.stringify({k:"monthkey"})){
  assert.ok(calls.includes("ml:monthkey:0:1:p:7"));
  const withoutScope=load(null);
  await withoutScope.nodes.direct.click();
- assert.ok(!withoutScope.calls.some(x=>x.startsWith("ml:")));
+ assert.ok(!withoutScope.calls.some(x=>x.startsWith("mt:")));
  console.log("Native monthly fares HTML bubble smoke test passed");
 })().catch(e=>{console.error(e);process.exitCode=1});
