@@ -165,3 +165,22 @@ async def test_month_job_not_triggered_when_answer_widget_query_fails(monkeypatc
     monkeypatch.setattr(browse_widget, "_api", fake_api)
     await browse_widget.handle_widget_query(SimpleNamespace(), {"id": "1", "data": "ma:key:0"})
     assert jobs == []
+
+@pytest.mark.asyncio
+async def test_month_filter_button_persists_user_preference(monkeypatch):
+    from bot.services import search_prefs
+    stored = []
+
+    async def save(user, direct):
+        stored.append((user.id, direct))
+        return True
+
+    monkeypatch.setattr(search_prefs, "save_direct_only", save)
+    monkeypatch.setattr(mw, "discovery_archive", SimpleNamespace(get=lambda key: make_payload()))
+    owner = {"from": {"id": 42}, "chat": {"id": 42}}
+    changed, job = await mw.query_result({**owner, "data": "mt:key:1"})
+    assert changed["ok"] == 1 and changed["d"] == 1 and job is None
+    assert stored == [(42, True)]
+    paged, _ = await mw.query_result({**owner, "data": "ml:key:0:1:p:-1"})
+    assert paged["ok"] == 1
+    assert stored == [(42, True)], "Pagination must not write preferences"
