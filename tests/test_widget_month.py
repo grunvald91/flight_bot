@@ -56,9 +56,11 @@ def test_calendar_is_30_days_and_marks_minimum_for_each_date():
 
 
 def test_month_widget_payloads_and_html_fit_telegram():
-    raw = mw._template().encode("utf-8")
+    raw = __import__("pathlib").Path("bot/widgets/month.html").read_bytes()
     assert len(raw) <= 32768
-    assert len(zlib.compress(raw, 9)) <= 4096
+    compressed = len(zlib.compress(raw, 9))
+    assert compressed <= 4096, f"Month HTML compressed to {compressed} bytes"
+    assert mw._template().encode("utf-8") == raw
     payload = make_payload()
     for sort in ("price", "date"):
         assert len(browse_widget._encode(mw.page_data(payload, sort=sort)).encode()) <= 1024
