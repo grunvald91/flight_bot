@@ -80,6 +80,8 @@ def page_data(payload: dict, page: int, direct_only: bool) -> dict:
             "i": index, "c": _safe_title(item.get("city")),
             "n": _safe_title(item.get("country")),
             "p": price, "t": _as_stops(item.get("transfers")),
+            "a": _safe_title(item.get("airline"), 12),
+            "at": str(item.get("departure_at") or "").replace("T", " ")[:16],
         })
     country = meta.get("country_code")
     title = _safe_title(country_label(country) if isinstance(country, str) and len(country) == 2
@@ -201,7 +203,7 @@ async def send_browse_widget(bot, chat_id: int, key: str, payload: dict, direct_
         logger.exception("Widget payload invalid; using normal message")
         return False
     result = await _api(bot, "sendWidget", {
-        "chat_id": chat_id, "html": html, "width": 340, "height": 460,
+        "chat_id": chat_id, "html": html, "height": 575,
         "allow_queries": True, "is_shared": False,
         "public_data": snapshot, "chat_data": scope,
         "caption": "⚡ Ориентировочные цены направлений. Если карточка недоступна, используйте обычную выдачу.",
@@ -332,20 +334,27 @@ async def handle_widget_query(bot, query: dict) -> None:
         return
     try:
         data = query.get("data") or ""
-        if isinstance(data, str) and data.split(":", 1)[0] in ("of", "od", "oa", "ov"):
+        prefix = data.split(":", 1)[0] if isinstance(data, str) else ""
+        is_offer = prefix in ("of", "od", "oa", "ov")
+        is_month = prefix in ("ml", "mc", "md", "ma", "mt")
+        if is_month:
+            from bot.widgets.month import query_result as month_query_result
+            response, job = await month_query_result(query)
+        elif is_offer:
             from bot.widgets.offers import query_result as offer_query_result
             response, job = await offer_query_result(query)
-            is_offer = True
         else:
             response, job = await _query_result(query, bot)
-            is_offer = False
         answer = _encode(response)
     except Exception:
         logger.exception("Widget query handler failed")
         answer, job = _encode({"ok": 0, "error": "Ошибка обработки запроса"}), None
     result = await _api(bot, "answerWidgetQuery", {"widget_query_id": query["id"], "data": answer})
     if result is not None and job:
-        if is_offer:
+        if is_month:
+            from bot.widgets.month import send_month_link
+            task = asyncio.create_task(send_month_link(bot, *job))
+        elif is_offer:
             from bot.widgets.offers import send_offer_actions
             task = asyncio.create_task(send_offer_actions(bot, *job))
         else:

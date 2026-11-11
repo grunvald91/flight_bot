@@ -29,6 +29,8 @@ on:
       - "tests/test_widget_ui.js"
       - "tests/test_widget_offers.py"
       - "tests/test_widget_offers_ui.js"
+      - "tests/test_widget_month.py"
+      - "tests/test_widget_month_ui.js"
       - "tests/test_entry_rules.py"
 
 permissions:
@@ -55,9 +57,10 @@ jobs:
           DB_TYPE: sqlite
           DB_NAME: test_flight_bot
           PYTHONPATH: .
-        run: pytest -q tests/test_channel_publisher.py tests/test_travel_planner.py tests/test_entry_rules.py tests/test_aviasales_api.py tests/test_month_search.py tests/test_widget_browse.py tests/test_widget_offers.py
+        run: pytest -q tests/test_channel_publisher.py tests/test_travel_planner.py tests/test_entry_rules.py tests/test_aviasales_api.py tests/test_month_search.py tests/test_widget_browse.py tests/test_widget_offers.py tests/test_widget_month.py
 
       - name: HTML bubble UI smoke test
         run: |
           node tests/test_widget_ui.js
           node tests/test_widget_offers_ui.js
+          node tests/test_widget_month_ui.js

@@ -302,7 +302,7 @@ async def test_broken_button_is_rejected_without_searching(monkeypatch):
 
     await month.cb_month_view(callback)
 
-    assert callback.alerts and "/month" in callback.alerts[0]
+    assert callback.alerts and "Дешёвые на месяц" in callback.alerts[0]
     assert api.calls == [] and callback.message.edits == []
 
 
@@ -378,7 +378,7 @@ async def test_destination_without_origin_asks_to_restart():
 
     await month.month_destination(message, state)
 
-    assert "/month" in message.answers[0][0]
+    assert "Дешёвые на месяц" in message.answers[0][0]
 
 
 # ── Запоминание переключателя «Без пересадок» ──
