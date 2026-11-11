@@ -33,7 +33,7 @@ function load(scope=JSON.stringify({k:"monthkey"})){
  const {nodes,calls}=load();
  assert.equal(nodes.items.children.length,2);
  assert.ok(calls.includes("ready"));
- assert.equal(nodes.minprice.textContent,"7 900 ₽".replace(/\u00a0/g," "));// locale-dependent formatting in VM
+ assert.match(nodes.minprice.textContent,/7.*900/);
  await nodes.items.children[0].click();
  assert.ok(calls.includes("md:monthkey:0"));
  assert.ok(nodes.detail.children.length);
