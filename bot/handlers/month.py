@@ -251,8 +251,9 @@ def _line(rank: int, ticket: dict, origin: str, destination: str) -> str:
 
     airline_code = ticket.get("airline", "")
     airline = html.escape(city_resolver.get_airline_name(airline_code)) if airline_code else "—"
-    transfers = ticket.get("transfers", 0)
-    transfers_text = "прямой" if transfers == 0 else format_transfers(transfers)
+    transfers = ticket.get("transfers")
+    transfers_text = ("пересадки не указаны" if type(transfers) is not int or transfers < 0
+                      else "прямой" if transfers == 0 else format_transfers(transfers))
 
     link = html.escape(aviasales_api.build_ticket_link(ticket, origin, destination, None), quote=True)
     return (
@@ -294,7 +295,7 @@ async def _render(origin: str, destination: str, direct_only: bool, page: int) -
     page = min(page, pages - 1)
 
     today = datetime.now().date()
-    period = f"{format_date_short(today.isoformat())} — {format_date_short((today + timedelta(days=WINDOW_DAYS)).isoformat())}"
+    period = f"{format_date_short(today.isoformat())} — {format_date_short((today + timedelta(days=WINDOW_DAYS - 1)).isoformat())}"
     header = (
         f"<b>📅 Дешёвые на месяц: {html.escape(city_resolver.get_city_name(origin))}"
         f" → {html.escape(_target_label(destination))}</b>\n"
