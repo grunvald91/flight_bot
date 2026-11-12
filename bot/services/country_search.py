@@ -15,7 +15,7 @@ CONCURRENCY = 8
 def _months(start, days: int) -> list[str]:
     end = start + timedelta(days=days)
     months, cursor = [], start.replace(day=1)
-    while cursor <= end:
+    while cursor < end:
         months.append(cursor.strftime("%Y-%m"))
         cursor = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
     return months
@@ -72,6 +72,6 @@ async def search_cheapest_to_country(
     groups = await asyncio.gather(*[one(code) for code in destinations])
     tickets = [t for group in groups for t in group]
     if direct_only:
-        tickets = [t for t in tickets if t.get("transfers", 0) == 0]
+        tickets = [t for t in tickets if t.get("transfers") == 0]
     tickets.sort(key=lambda t: (t["price"], t.get("departure_at", ""), t["destination"]))
     return tickets

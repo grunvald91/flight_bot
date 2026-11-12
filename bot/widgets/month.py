@@ -35,8 +35,11 @@ def _when(row: dict):
 
 def _window(payload: dict):
     meta = payload.get("meta") or {}
-    start = date.fromisoformat(str(meta["start"]))
-    days = int(meta.get("days") or 30)
+    try:
+        start = date.fromisoformat(str(meta.get("start") or ""))
+        days = int(meta.get("days") or 30)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("Invalid search window") from exc
     if not 1 <= days <= 31:
         raise ValueError("Invalid search window")
     return start, days
@@ -53,7 +56,8 @@ def _options(payload: dict, direct: bool, sort: str, day: int):
         if not isinstance(ticket, dict):
             continue
         price, when, transfers = _as_price(ticket.get("price")), _when(ticket), _as_stops(ticket.get("transfers"))
-        if price is None or when is None or not start <= when < start + timedelta(days=days):
+        # Archived cards must not present departures in the past as current deals.
+        if price is None or when is None or not max(start, date.today()) <= when < start + timedelta(days=days):
             continue
         if direct and transfers != 0:
             continue
@@ -90,8 +94,8 @@ def page_data(payload: dict, page: int = 0, direct: bool = False,
     pages = max(1, (len(rows) + PAGE_SIZE - 1) // PAGE_SIZE)
     if page >= pages:
         raise ValueError("Page out of range")
-    month_rows = _options(payload, direct, "price", -1)
-    best = month_rows[0] if month_rows else None
+    # The highlighted minimum must refer to the currently selected day/filter.
+    best = min(rows, key=lambda r: (r[2], r[3])) if rows else None
     meta = payload["meta"]
     result = {
         "ok": 1, "m": "month", "pg": page, "pages": pages, "total": len(rows),
@@ -101,7 +105,17 @@ def page_data(payload: dict, page: int = 0, direct: bool = False,
         "best": {"p": best[2], "dt": best[3].isoformat()} if best else None,
         "rows": [_row(r) for r in rows[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]],
     }
-    _encode(result)
+    # Keep every ticket on its page: optional city/airline labels can shrink,
+    # but silently dropping items would make pagination incomplete.
+    try:
+        _encode(result)
+    except ValueError:
+        for row in result["rows"]:
+            row["to"] = row["to"][:10]
+            row["c"] = row["c"][:6]
+            row["tm"] = row["tm"][:5]
+        result["route"] = result["route"][:30]
+        _encode(result)
     return result
 
 
@@ -129,6 +143,9 @@ def detail_data(payload: dict, index: int) -> dict:
     price = _as_price(ticket.get("price"))
     if when is None or price is None:
         raise ValueError("Incomplete ticket")
+    start, days = _window(payload)
+    if not max(start, date.today()) <= when < start + timedelta(days=days):
+        raise ValueError("Ticket date is no longer inside the active search window")
     meta = payload.get("meta") or {}
     result = {
         "ok": 1, "detail": 1, "p": price, "dt": str(ticket.get("departure_at") or "")[:22],

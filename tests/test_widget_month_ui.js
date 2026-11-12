@@ -48,6 +48,12 @@ function load(scope=JSON.stringify({k:"monthkey"})){
  assert.equal(nodes.cal.children[7].disabled,false);
  await nodes.cal.children[7].click();
  assert.ok(calls.includes("ml:monthkey:0:1:p:7"));
+ assert.equal(nodes.reset.className,"chip");
+ assert.equal(nodes.bestlabel.textContent,"Минимальная цена на дату");
+ await nodes.reset.click();
+ assert.ok(calls.includes("ml:monthkey:0:1:p:-1"));
+ assert.equal(nodes.reset.className,"chip hide");
+ assert.equal(nodes.bestlabel.textContent,"Минимальная цена за месяц");
  const withoutScope=load(null);
  await withoutScope.nodes.direct.click();
  assert.ok(!withoutScope.calls.some(x=>x.startsWith("mt:")));

@@ -192,3 +192,14 @@ async def test_widget_dispatcher_sends_offer_action_only_after_query_answer(monk
     monkeypatch.setattr(ow, "send_offer_actions", fake_send)
     await widgets.handle_widget_query(SimpleNamespace(), {"id": "x", "data": "oa:testkey:0"})
     assert jobs == []
+
+
+def test_long_unicode_offer_names_keep_every_flight_on_page():
+    payload = sample("discover")
+    for offer in payload["offers"]:
+        offer["_discovery"] = {"country": "🛫" * 80, "city": "🌍" * 80}
+        offer["carriers"] = ["✈️" * 60]
+    page = ow.page_data(payload, 0)
+    assert len(page["rows"]) == 3
+    assert page["total"] == 3
+    assert len(widgets._encode(page).encode("utf-8")) <= 1024

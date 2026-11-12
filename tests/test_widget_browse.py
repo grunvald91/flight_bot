@@ -303,3 +303,17 @@ async def test_api_ok_without_widget_falls_back_to_legacy(monkeypatch):
     monkeypatch.setattr(widgets, "_api", missing_widget)
     accepted = await widgets.send_browse_widget(SimpleNamespace(token="unused"), 42, "key", example(), False)
     assert accepted is False
+
+
+def test_browse_page_with_long_international_names_never_drops_directions():
+    payload = example()
+    template = dict(payload["options"][0])
+    payload["options"] = [
+        {**template, "city": "🛫" * 40, "country": "🌍" * 40,
+         "airline": "🛩️" * 30, "departure_at": future_date() + "T12:00"}
+        for _ in range(4)
+    ]
+    page = widgets.page_data(payload, 0, False)
+    assert page["total"] == 4
+    assert len(page["rows"]) == 4
+    assert len(widgets._encode(page).encode("utf-8")) <= 1024

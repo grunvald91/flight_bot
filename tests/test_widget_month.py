@@ -184,3 +184,36 @@ async def test_month_filter_button_persists_user_preference(monkeypatch):
     paged, _ = await mw.query_result({**owner, "data": "ml:key:0:1:p:-1"})
     assert paged["ok"] == 1
     assert stored == [(42, True)], "Pagination must not write preferences"
+
+
+def test_selected_calendar_date_highlight_uses_only_that_dates_fares():
+    payload = make_payload()
+    day_four = mw.page_data(payload, page=0, direct=False, sort="price", day=4)
+    assert day_four["total"] == 1
+    assert day_four["best"]["p"] == 9800
+    day_eight = mw.page_data(payload, page=0, direct=False, sort="price", day=8)
+    assert day_eight["total"] == 2
+    assert day_eight["best"]["p"] == 6900
+    direct_day_eight = mw.page_data(payload, page=0, direct=True, sort="price", day=8)
+    assert direct_day_eight["total"] == 0
+    assert direct_day_eight["best"] is None
+
+
+def test_outdated_monthly_fare_cannot_be_opened_or_purchased():
+    payload = make_payload()
+    payload["options"][0]["departure_at"] = (date.today() - timedelta(days=1)).isoformat() + "T10:00"
+    page = mw.page_data(payload)
+    assert page["total"] == 3
+    assert all(r["i"] != 0 for r in page["rows"])
+    with pytest.raises(ValueError, match="active search window"):
+        mw.detail_data(payload, 0)
+
+
+def test_month_page_has_all_four_fares_even_with_long_carrier_labels(monkeypatch):
+    payload = make_payload()
+    for option in payload["options"]:
+        option["airline"] = "✈️" * 50
+        option["destination"] = "IST"
+    page = mw.page_data(payload)
+    assert len(page["rows"]) == 4
+    assert len(browse_widget._encode(page).encode("utf-8")) <= 1024

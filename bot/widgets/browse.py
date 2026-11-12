@@ -77,10 +77,10 @@ def page_data(payload: dict, page: int, direct_only: bool) -> dict:
         if price is None:
             continue
         rows.append({
-            "i": index, "c": _safe_title(item.get("city")),
-            "n": _safe_title(item.get("country")),
+            "i": index, "c": _safe_title(item.get("city"), 20),
+            "n": _safe_title(item.get("country"), 16),
             "p": price, "t": _as_stops(item.get("transfers")),
-            "a": _safe_title(item.get("airline"), 12),
+            "a": _safe_title(item.get("airline"), 8),
             "at": str(item.get("departure_at") or "").replace("T", " ")[:16],
         })
     country = meta.get("country_code")
@@ -90,7 +90,16 @@ def page_data(payload: dict, page: int, direct_only: bool) -> dict:
               "total": len(view), "pages": pages, "title": title, "rows": rows,
               "date": str(meta.get("departure_date") or "")[:10],
               "incomplete": bool(direct_only and meta.get("direct_checked") is False)}
-    _encode(result)
+    try:
+        _encode(result)
+    except ValueError:
+        # Do not drop whole directions or miscount pages because of long names.
+        for row in result["rows"]:
+            row.pop("at", None)
+            row.pop("a", None)
+            row["c"] = row["c"][:12]
+            row["n"] = row["n"][:12]
+        _encode(result)
     return result
 
 
