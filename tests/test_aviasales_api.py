@@ -118,3 +118,29 @@ def test_explicit_date_uses_requested_search_instead_of_ticket_deeplink(api):
     assert api.build_ticket_link(ticket, "MOW", "AYT", "2026-11-11") == (
         "https://www.aviasales.ru/search/MOW1111AYT1"
     )
+
+
+@pytest.mark.asyncio
+async def test_cheapest_30_day_window_has_no_extra_day_or_fake_nonstop(api):
+    """Regression: an unknown transfer count is not a direct flight."""
+    from datetime import date, timedelta
+    start = date(2026, 11, 12)
+    calls = []
+
+    async def fake_prices(**kwargs):
+        calls.append(kwargs["depart_date"])
+        return [
+            {"price": 3000, "departure_at": (start + timedelta(days=0)).isoformat() + "T08:00"},
+            {"price": 4000, "departure_at": (start + timedelta(days=29)).isoformat() + "T11:00",
+             "number_of_changes": 1},
+            {"price": 2000, "departure_at": (start + timedelta(days=30)).isoformat() + "T12:00",
+             "transfers": 0},
+        ]
+
+    api.search_prices_for_dates = fake_prices
+    results = await api.search_cheapest_in_window("AER", "IST", start_date=start, days=30)
+    assert {row["departure_at"][:10] for row in results} == {
+        start.isoformat(), (start + timedelta(days=29)).isoformat(),
+    }
+    assert [row["transfers"] for row in results] == [None, 1]
+    assert sorted(set(calls)) == ["2026-11", "2026-12"]
