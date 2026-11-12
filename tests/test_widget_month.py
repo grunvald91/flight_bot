@@ -35,13 +35,15 @@ def test_month_widget_price_date_order_and_strict_nonstop():
     payload = make_payload()
     page = mw.page_data(payload)
     assert page["m"] == "month" and page["total"] == 4
-    assert [r["i"] for r in page["rows"]] == [1, 3, 2, 0]
+    assert [r["i"] for r in page["rows"]] == [1, 3]
+    assert [r["i"] for r in mw.page_data(payload, page=1)["rows"]] == [2, 0]
     assert page["best"]["p"] == 6900
     direct = mw.page_data(payload, 0, True)
     assert direct["total"] == 2
     assert [r["i"] for r in direct["rows"]] == [3, 0]
     date_ordered = mw.page_data(payload, 0, False, "date")
-    assert [r["i"] for r in date_ordered["rows"]] == [0, 1, 2, 3]
+    assert [r["i"] for r in date_ordered["rows"]] == [0, 1]
+    assert [r["i"] for r in mw.page_data(payload, page=1, sort="date")["rows"]] == [2, 3]
     chosen_day = mw.page_data(payload, 0, False, "price", 8)
     assert [r["i"] for r in chosen_day["rows"]] == [1, 2]
 
@@ -119,6 +121,7 @@ async def test_widget_sent_only_to_private_chat_and_real_widget_reply(monkeypatc
     assert await mw.send_month_widget(SimpleNamespace(token="test"), 42, "key", payload)
     assert len(calls) == 1 and calls[0][0] == "sendWidget"
     assert json.loads(calls[0][1]["chat_data"]) == {"k": "key"}
+    assert "height" not in calls[0][1]
     assert not await mw.send_month_widget(SimpleNamespace(token="test"), 71, "key", payload)
     assert len(calls) == 1
 
@@ -215,5 +218,6 @@ def test_month_page_has_all_four_fares_even_with_long_carrier_labels(monkeypatch
         option["airline"] = "✈️" * 50
         option["destination"] = "IST"
     page = mw.page_data(payload)
-    assert len(page["rows"]) == 4
+    assert len(page["rows"]) == 2
+    assert len(mw.page_data(payload, page=1)["rows"]) == 2
     assert len(browse_widget._encode(page).encode("utf-8")) <= 1024
