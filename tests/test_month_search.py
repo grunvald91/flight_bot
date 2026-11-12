@@ -558,3 +558,21 @@ async def test_window_normalizes_fields_and_dedupes():
     assert tickets[0]["price"] == 9000
     assert tickets[0]["transfers"] == 1
     assert tickets[0]["origin"] == "AER" and tickets[0]["destination"] == "LED"
+
+
+@pytest.mark.asyncio
+async def test_unknown_transfer_count_is_not_advertised_as_direct(monkeypatch):
+    _use_api(monkeypatch, [_ticket(5800, transfers=None)])
+    result, _ = await month._render("AER", "LED", direct_only=False, page=0)
+    assert "пересадки не указаны" in result
+    assert "прямой" not in result.lower()
+    direct_only, _ = await month._render("AER", "LED", direct_only=True, page=0)
+    assert "Прямых билетов" in direct_only
+
+
+@pytest.mark.asyncio
+async def test_displayed_month_window_has_thirty_calendar_days(monkeypatch):
+    _use_api(monkeypatch, [_ticket(7000)])
+    result, _ = await month._render("AER", "LED", direct_only=False, page=0)
+    end = datetime.now().date() + timedelta(days=29)
+    assert month.format_date_short(end.isoformat()) in result
