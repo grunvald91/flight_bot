@@ -20,7 +20,7 @@ from bot.widgets.browse import (
 )
 
 logger = logging.getLogger(__name__)
-PAGE_SIZE = 4
+PAGE_SIZE = 2
 _TEMPLATE = Path(__file__).with_name("month.html")
 _IATA = re.compile(r"[A-Z]{3}")
 
@@ -181,7 +181,7 @@ async def send_month_widget(bot, chat_id: int, key: str, payload: dict, direct: 
         logger.exception("Month widget could not be prepared")
         return False
     result = await _api(bot, "sendWidget", {
-        "chat_id": chat_id, "html": html, "height": 590,
+        "chat_id": chat_id, "html": html,
         "allow_queries": True, "is_shared": False,
         "public_data": initial, "chat_data": _encode({"k": key}),
         "caption": "📅 Самые дешёвые даты по направлению • цены ориентировочные",

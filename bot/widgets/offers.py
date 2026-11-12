@@ -18,7 +18,7 @@ from bot.widgets.browse import (
 )
 
 logger = logging.getLogger(__name__)
-PAGE_SIZE = 3
+PAGE_SIZE = 2
 _TEMPLATE = Path(__file__).with_name("offers.html")
 _MODES = {"tutu", "discover"}
 
@@ -171,7 +171,7 @@ async def send_offers_widget(bot, chat_id: int, key: str, payload: dict, kind: s
         logger.exception("Could not prepare offer widget")
         return False
     result = await _api(bot, "sendWidget", {
-        "chat_id": chat_id, "html": html, "height": 545,
+        "chat_id": chat_id, "html": html,
         "allow_queries": True, "is_shared": False,
         "public_data": initial, "chat_data": scope,
         "caption": ("🌍 Подтверждённые билеты — подробный поиск"

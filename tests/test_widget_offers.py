@@ -61,13 +61,15 @@ def test_pages_sorting_and_direct_only():
     page = ow.page_data(data)
     assert page["m"] == "tutu"
     assert page["total"] == 3
-    assert [r["i"] for r in page["rows"]] == [1, 0, 2]
-    assert [r["s"] for r in page["rows"]] == [1, 0, None]
+    assert [r["i"] for r in page["rows"]] == [1, 0]
+    assert [r["i"] for r in ow.page_data(data, page=1)["rows"]] == [2]
+    assert [r["s"] for r in page["rows"]] == [1, 0]
     direct = ow.page_data(data, 0, True, "price")
     assert direct["total"] == 1
     assert direct["rows"][0]["i"] == 0
     by_stops = ow.page_data(data, 0, False, "stops")
-    assert [r["i"] for r in by_stops["rows"]] == [0, 1, 2]
+    assert [r["i"] for r in by_stops["rows"]] == [0, 1]
+    assert [r["i"] for r in ow.page_data(data, page=1, sort="stops")["rows"]] == [2]
 
 
 def test_ui_and_payload_under_telegram_limits():
@@ -108,6 +110,7 @@ async def test_send_to_private_owner_only_and_fallback(monkeypatch):
     assert calls[0][0] == "sendWidget"
     assert json.loads(calls[0][1]["chat_data"]) == {"k": "testkey"}
     assert calls[0][1]["is_shared"] is False
+    assert "height" not in calls[0][1]
     assert not await ow.send_offers_widget(SimpleNamespace(token="not-used"), 99, "testkey", payload, "tutu")
     assert len(calls) == 1
     async def no_widget(bot, method, data):
@@ -200,6 +203,7 @@ def test_long_unicode_offer_names_keep_every_flight_on_page():
         offer["_discovery"] = {"country": "🛫" * 80, "city": "🌍" * 80}
         offer["carriers"] = ["✈️" * 60]
     page = ow.page_data(payload, 0)
-    assert len(page["rows"]) == 3
+    assert len(page["rows"]) == 2
+    assert len(ow.page_data(payload, page=1)["rows"]) == 1
     assert page["total"] == 3
     assert len(widgets._encode(page).encode("utf-8")) <= 1024
