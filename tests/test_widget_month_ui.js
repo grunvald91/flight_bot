@@ -4,6 +4,7 @@ const html=fs.readFileSync("bot/widgets/month.html","utf8");
 const script=html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
 assert.ok(script);
 new vm.Script(script);
+assert.match(script,/s\.pg\*2\+j\+1/,"Monthly row numbers must follow 2-per-page layout");
 class Element{
  constructor(){this.children=[];this.listeners={};this.className="";this.disabled=false}
  set textContent(v){this.text=String(v);this.children=[]}
