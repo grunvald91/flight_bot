@@ -110,14 +110,16 @@ def page_data(payload: dict, page: int = 0, direct: bool = False, sort: str = "p
         "unverified": int(meta.get("unverified") or 0) if kind == "discover" else 0,
         "rows": [_row(i, offer) for i, offer in view[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]],
     }
-    # Telegram's 1024-byte limit is on UTF-8, not Python character count.
-    while result["rows"]:
-        try:
-            _encode(result)
-            break
-        except ValueError:
-            result["rows"].pop()
-    _encode(result)
+    # Never remove offers from a page: hidden rows become unreachable because
+    # pagination still advances in groups of PAGE_SIZE.
+    try:
+        _encode(result)
+    except ValueError:
+        for row in result["rows"]:
+            row["a"] = row["a"][:14]
+            row["b"] = row["b"][:14]
+            row["c"] = row["c"][:12]
+        _encode(result)
     return result
 
 
