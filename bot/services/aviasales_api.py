@@ -613,7 +613,8 @@ class AviasalesAPI:
                 t.setdefault("departure_at", dep)
                 t.setdefault("origin", origin)
                 t.setdefault("destination", destination)
-                t.setdefault("transfers", 0)
+                # Unknown change count must not be advertised as nonstop.
+                t.setdefault("transfers", None)
                 if not t.get("price"):
                     continue
                 key = (t["price"], dep[:16], t.get("airline", ""), t["transfers"])
