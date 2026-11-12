@@ -317,3 +317,14 @@ def test_browse_page_with_long_international_names_never_drops_directions():
     assert page["total"] == 4
     assert len(page["rows"]) == 4
     assert len(widgets._encode(page).encode("utf-8")) <= 1024
+
+
+def test_all_native_bubbles_have_lightweight_motion_and_accessible_opt_out():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "bot" / "widgets"
+    for name in ("browse", "offers", "month"):
+        markup = (root / f"{name}.html").read_text(encoding="utf-8")
+        assert "@keyframes rise" in markup, name
+        assert "prefers-reduced-motion:reduce" in markup, name
+        assert "box-shadow:" not in markup, name
+        assert "backdrop-filter:" not in markup, name
