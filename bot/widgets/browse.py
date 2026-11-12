@@ -212,7 +212,7 @@ async def send_browse_widget(bot, chat_id: int, key: str, payload: dict, direct_
         logger.exception("Widget payload invalid; using normal message")
         return False
     result = await _api(bot, "sendWidget", {
-        "chat_id": chat_id, "html": html, "height": 575,
+        "chat_id": chat_id, "html": html,
         "allow_queries": True, "is_shared": False,
         "public_data": snapshot, "chat_data": scope,
         "caption": "⚡ Ориентировочные цены направлений. Если карточка недоступна, используйте обычную выдачу.",
