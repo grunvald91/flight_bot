@@ -392,7 +392,8 @@ class AviasalesAPI:
                 seen.add(key)
                 t.setdefault("origin", origin)
                 t.setdefault("destination", destination)
-                t.setdefault("transfers", 0)
+                # Missing provider data must never be represented as a nonstop flight.
+                t.setdefault("transfers", None)
                 t.setdefault("price", t.get("value", 0))
                 unique.append(t)
 
@@ -571,11 +572,13 @@ class AviasalesAPI:
 
         if start_date is None:
             start_date = datetime.now().date()
+        if type(days) is not int or days < 1:
+            raise ValueError("Search window must contain at least one day")
         end_date = start_date + timedelta(days=days)
 
         months = []
         cursor = start_date.replace(day=1)
-        while cursor <= end_date:
+        while cursor < end_date:
             months.append(cursor.strftime("%Y-%m"))
             cursor = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
 
@@ -605,7 +608,7 @@ class AviasalesAPI:
                 if "number_of_changes" in t and "transfers" not in t:
                     t["transfers"] = t["number_of_changes"]
                 dep = t.get("departure_at") or t.get("depart_date") or ""
-                if not dep or not start_str <= dep[:10] <= end_str:
+                if not dep or not start_str <= dep[:10] < end_str:
                     continue
                 t.setdefault("departure_at", dep)
                 t.setdefault("origin", origin)
