@@ -18,6 +18,8 @@ on:
       - "tests/test_month_search.py"
       - "tests/test_travel_planner.py"
       - "tests/test_channel_publisher.py"
+      - "bot/services/scheduler.py"
+      - "bot/services/channel_publisher.py"
       - "bot/handlers/entry.py"
       - "bot/services/entry_rules.py"
       - "bot/services/fast_browse.py"
