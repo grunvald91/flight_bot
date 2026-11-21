@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta, date
+from zoneinfo import ZoneInfo
 
 from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -55,7 +56,43 @@ async def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         misfire_grace_time=3600,
     )
 
+    # A failed daily run is not retried by APScheduler. Recheck unposted channels
+    # throughout the remaining day and immediately after service startup.
+    scheduler.add_job(
+        retry_missed_channel_publications,
+        "interval",
+        minutes=15,
+        args=[bot],
+        id="retry_missed_daily_channels",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=900,
+    )
+    scheduler.add_job(
+        retry_missed_channel_publications,
+        "date",
+        run_date=datetime.now(ZoneInfo(TIMEZONE)) + timedelta(seconds=10),
+        args=[bot],
+        id="recover_daily_channels_on_startup",
+        replace_existing=True,
+        misfire_grace_time=900,
+    )
+
     return scheduler
+
+
+def _channel_publication_due(now: datetime) -> bool:
+    """Never publish tomorrow's fares before the configured local posting time."""
+    return (now.hour, now.minute) >= (DAILY_CHANNEL_HOUR, DAILY_CHANNEL_MINUTE)
+
+
+async def retry_missed_channel_publications(bot: Bot) -> dict[str, int]:
+    now = datetime.now(ZoneInfo(TIMEZONE))
+    if not _channel_publication_due(now):
+        return {}
+    # Existing publication state provides per-channel, per-date idempotency.
+    return await publish_tomorrow_channels(bot)
 
 
 async def check_price_subscriptions(bot: Bot):
