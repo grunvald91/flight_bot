@@ -10,6 +10,10 @@ on:
       - "bot/handlers/common.py"
       - "bot/handlers/month.py"
       - "bot/services/aviasales_api.py"
+      - "bot/services/scheduler.py"
+      - "bot/services/channel_publisher.py"
+      - "bot/config.py"
+      - "tests/test_channel_publisher.py"
       - "bot/handlers/browse.py"
       - "bot/services/discovery_archive.py"
       - "bot/widgets/**"
@@ -28,7 +32,30 @@ env:
   DEPLOY_FILES: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/handlers/common.py,bot/handlers/travel.py,bot/handlers/entry.py,bot/handlers/browse.py,bot/handlers/discover.py,bot/handlers/month.py,bot/keyboards/common_kb.py,bot/states/search.py,bot/services/scheduler.py,bot/services/channel_publisher.py,bot/services/tutu_mcp.py,bot/services/entry_rules.py,bot/services/fast_browse.py,bot/services/discovery_archive.py,bot/services/aviasales_api.py,bot/services/search_prefs.py,bot/services/countries.py,bot/services/country_search.py,bot/widgets/__init__.py,bot/widgets/browse.py,bot/widgets/browse.html,bot/widgets/offers.py,bot/widgets/offers.html,bot/widgets/month.py,bot/widgets/month.html,database/crud.py,database/database.py,database/models.py,data/kdmid_entry_rules.csv"
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies for publication tests
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pytest pytest-asyncio aiosqlite greenlet
+      - name: Verify daily publishing before deploying
+        env:
+          DB_TYPE: sqlite
+          DB_NAME: test_flight_bot
+          PYTHONPATH: .
+          ADMIN_IDS: ""
+        run: |
+          python -m compileall -q bot database tests
+          pytest -q tests/test_channel_publisher.py
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
