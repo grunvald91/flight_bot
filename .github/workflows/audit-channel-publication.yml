@@ -1,0 +1,71 @@
+name: Audit daily flight channel publications
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/audit-channel-publication.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Read live publication state and relevant service logs
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 188.120.254.223
+          username: root
+          password: ${{ secrets.FLIGHT_BOT_SSH_PASSWORD }}
+          command_timeout: 5m
+          script: |
+            set -e
+            cd /opt/flight_bot
+            python3 - <<'PY'
+            import datetime
+            import json
+            import time
+            from pathlib import Path
+            from zoneinfo import ZoneInfo
+
+            expected = (datetime.datetime.now(ZoneInfo("Europe/Moscow")).date()
+                        + datetime.timedelta(days=1)).isoformat()
+            state_path = Path("/opt/flight_bot/private_cache/channel_publication.json")
+            keys = ("moscow", "sochi")
+
+            for attempt in range(1, 9):
+                try:
+                    state = json.loads(state_path.read_text(encoding="utf-8"))
+                    channels = state.get("channels") or {}
+                except (OSError, ValueError, AttributeError):
+                    channels = {}
+                statuses = {
+                    key: (channels.get(key) or {}).get("last_published_date") == expected
+                    for key in keys
+                }
+                if all(statuses.values()) or attempt == 8:
+                    break
+                time.sleep(15)
+
+            print("Expected departure date:", expected)
+            for key in keys:
+                record = channels.get(key) or {}
+                print(
+                    "Channel", key,
+                    "| published_for_target:", statuses[key],
+                    "| last_published_date:", record.get("last_published_date") or "unknown",
+                    "| last_attempt_status:", record.get("last_attempt_status") or "not_recorded",
+                    "| last_attempt_at:", record.get("last_attempt_at") or "not_recorded",
+                )
+            if not all(statuses.values()):
+                print("WARNING: One or more channel posts are still unconfirmed.")
+            PY
+            echo "Relevant service logs (sanitized labels only):"
+            journalctl -u flight-bot --since "-20 minutes" --no-pager -o cat |
+              grep -E 'Published [0-9]+ fast international destinations|No fast international options|Fast daily channel publication failed|channel is not configured|retry_missed_channel_publications|Scheduler started|Bot started:' |
+              tail -n 60 || true
