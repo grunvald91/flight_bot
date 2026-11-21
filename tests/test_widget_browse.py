@@ -226,7 +226,7 @@ async def test_unknown_aiogram_update_field_is_handled(monkeypatch):
             "from": {"id": 42, "is_bot": False, "first_name": "Tester"},
             "chat": {"id": 42, "type": "private"},
             "chat_instance": "test-widget-chat",
-            "type": "message",
+            "type": {"type": "data"},
             "message_id": 123, "data": "b:key:0:0",
         },
     })
