@@ -67,5 +67,9 @@ jobs:
             PY
             echo "Relevant service logs (sanitized labels only):"
             journalctl -u flight-bot --since "-20 minutes" --no-pager -o cat |
-              grep -E 'Published [0-9]+ fast international destinations|No fast international options|Fast daily channel publication failed|channel is not configured|retry_missed_channel_publications|Scheduler started|Bot started:' |
+              grep -E 'Published [0-9]+ fast international destinations|No fast international options|Fast daily channel publication failed|channel is not configured|channel already published|retry_missed_channel_publications|Scheduler started|Bot started:' |
               tail -n 60 || true
+            echo "Morning publication history (Moscow local time):"
+            journalctl -u flight-bot --since "2026-11-21 07:45:00" --until "2026-11-21 10:34:35" --no-pager -o cat |
+              grep -E 'publish_tomorrow_channels|Published [0-9]+ fast international destinations|No fast international options|Fast daily channel publication failed|channel already published|channel is not configured|API error|API request failed|Incomplete destination discovery' |
+              tail -n 100 || true
