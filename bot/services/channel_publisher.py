@@ -1,4 +1,6 @@
+import asyncio
 import html
+import os
 import json
 import logging
 from datetime import datetime, timedelta
@@ -14,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 STATE_PATH = ROOT_DIR / "private_cache" / "channel_publication.json"
+
+# The morning cron, startup catch-up, periodic retries, and manual action may
+# overlap. A single in-process lock prevents sending the same day's post twice.
+_PUBLICATION_LOCK = asyncio.Lock()
+_SENT_THIS_PROCESS: set[tuple[str, str]] = set()
 
 CHANNELS = (
     ("moscow", "MOW", "Москвы", MOSCOW_CHANNEL_ID),
@@ -84,11 +91,16 @@ def _resolve_chat_id(key: str, configured: str) -> int | str | None:
 
 
 def _already_published(key: str, departure_date: str) -> bool:
+    if (key, departure_date) in _SENT_THIS_PROCESS:
+        return True
     binding = get_channel_bindings().get(key)
     return bool(binding and binding.get("last_published_date") == departure_date)
 
 
 def _mark_published(key: str, departure_date: str) -> None:
+    # Telegram has already accepted the post. Even if writing local state fails,
+    # block duplicate attempts until the process can be restarted and repaired.
+    _SENT_THIS_PROCESS.add((key, departure_date))
     state = _load_state()
     channels = state.setdefault("channels", {})
     binding = channels.get(key)
@@ -96,7 +108,54 @@ def _mark_published(key: str, departure_date: str) -> None:
         binding = {}
         channels[key] = binding
     binding["last_published_date"] = departure_date
+    binding["last_attempt_status"] = "published"
+    binding["last_attempt_at"] = datetime.now(ZoneInfo(TIMEZONE)).isoformat(timespec="seconds")
     _save_state(state)
+
+
+def _record_failure(key: str, departure_date: str, reason: str) -> bool:
+    """Persist the failure and return whether the admin needs a first alert."""
+    try:
+        state = _load_state()
+        channels = state.setdefault("channels", {})
+        binding = channels.get(key)
+        if not isinstance(binding, dict):
+            binding = {}
+            channels[key] = binding
+        should_alert = binding.get("last_failure_alert_date") != departure_date
+        binding["last_attempt_date"] = departure_date
+        binding["last_attempt_status"] = reason
+        binding["last_attempt_at"] = datetime.now(ZoneInfo(TIMEZONE)).isoformat(timespec="seconds")
+        if should_alert:
+            binding["last_failure_alert_date"] = departure_date
+        _save_state(state)
+        return should_alert
+    except Exception:
+        logger.exception("Could not persist publication failure for %s", key)
+        return False
+
+
+async def _alert_publication_failure(bot: Bot, key: str, departure_date: str, reason: str) -> None:
+    if not _record_failure(key, departure_date, reason):
+        return
+    raw_admin_ids = os.getenv("ADMIN_IDS", "437862772")
+    for value in raw_admin_ids.replace(";", ",").split(","):
+        try:
+            admin_id = int(value.strip())
+        except ValueError:
+            continue
+        try:
+            await bot.send_message(
+                chat_id=admin_id,
+                text=(
+                    f"⚠️ Не опубликована подборка авиабилетов для {key} "
+                    f"на {_format_date(departure_date)}. Причина: {reason}. "
+                    "Бот будет повторять попытку каждые 15 минут."
+                ),
+                disable_notification=True,
+            )
+        except Exception:
+            logger.exception("Could not alert admin about %s publication failure", key)
 
 
 def _format_date(value: str) -> str:
@@ -204,32 +263,44 @@ async def publish_channel(
 
 
 async def publish_tomorrow_channels(bot: Bot, *, force: bool = False) -> dict[str, int]:
-    now = datetime.now(ZoneInfo(TIMEZONE))
-    departure_date = (now.date() + timedelta(days=1)).isoformat()
-    result: dict[str, int] = {}
+    # The lock spans the discovery, send, and local acknowledgement, so a cron
+    # tick cannot race with the startup/interval retries or the manual action.
+    async with _PUBLICATION_LOCK:
+        now = datetime.now(ZoneInfo(TIMEZONE))
+        departure_date = (now.date() + timedelta(days=1)).isoformat()
+        result: dict[str, int] = {}
 
-    for key, origin, origin_label, configured_chat_id in CHANNELS:
-        chat_id = _resolve_chat_id(key, configured_chat_id)
-        if not chat_id:
-            logger.warning("%s channel is not configured; skipping", key)
-            result[key] = 0
-            continue
-        if not force and _already_published(key, departure_date):
-            logger.info("%s channel already published for %s", key, departure_date)
-            result[key] = 0
-            continue
-        try:
-            result[key] = await publish_channel(
-                bot,
-                origin=origin,
-                origin_label=origin_label,
-                chat_id=chat_id,
-                departure_date=departure_date,
-            )
-            if result[key] > 0:
-                _mark_published(key, departure_date)
-        except Exception:
-            logger.exception("Fast daily channel publication failed for %s", key)
-            result[key] = 0
+        for key, origin, origin_label, configured_chat_id in CHANNELS:
+            chat_id = _resolve_chat_id(key, configured_chat_id)
+            if not chat_id:
+                logger.warning("%s channel is not configured; skipping", key)
+                result[key] = 0
+                await _alert_publication_failure(bot, key, departure_date, "channel_not_configured")
+                continue
+            if not force and _already_published(key, departure_date):
+                logger.info("%s channel already published for %s", key, departure_date)
+                result[key] = 0
+                continue
+            try:
+                result[key] = await publish_channel(
+                    bot,
+                    origin=origin,
+                    origin_label=origin_label,
+                    chat_id=chat_id,
+                    departure_date=departure_date,
+                )
+                if result[key] > 0:
+                    try:
+                        _mark_published(key, departure_date)
+                    except Exception:
+                        logger.exception(
+                            "Telegram post sent but acknowledgement could not be saved for %s", key
+                        )
+                else:
+                    await _alert_publication_failure(bot, key, departure_date, "no_valid_fares")
+            except Exception:
+                logger.exception("Fast daily channel publication failed for %s", key)
+                result[key] = 0
+                await _alert_publication_failure(bot, key, departure_date, "source_or_delivery_failed")
 
-    return result
+        return result
