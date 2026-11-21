@@ -222,7 +222,11 @@ async def test_unknown_aiogram_update_field_is_handled(monkeypatch):
     update = Update.model_validate({
         "update_id": 101,
         "widget_query": {
-            "id": "q101", "from": {"id": 42}, "chat": {"id": 42},
+            "id": "q101",
+            "from": {"id": 42, "is_bot": False, "first_name": "Tester"},
+            "chat": {"id": 42, "type": "private"},
+            "chat_instance": "test-widget-chat",
+            "type": "message",
             "message_id": 123, "data": "b:key:0:0",
         },
     })
