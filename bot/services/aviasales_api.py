@@ -82,6 +82,7 @@ class AviasalesAPI:
         limit: int = 50,
         unique: bool = False,
         sorting: str = "price",
+        strict: bool = False,
     ) -> list[dict]:
         """Поиск цен на конкретные даты. Основной эндпоинт для inline-поиска по маршруту."""
         params = {
@@ -100,11 +101,14 @@ class AviasalesAPI:
         if return_date:
             params["return_at"] = return_date
 
-        cache_key = f"prices_v2:{origin}-{destination}:{depart_date or 'any'}:{return_date or 'none'}:{direct}:{unique}:{sorting}"
+        cache_key = f"prices_v2:{origin}-{destination}:{depart_date or 'any'}:{return_date or 'none'}:{direct}:{unique}:{sorting}:{one_way}:{limit}"
         data = await self._cached_request(cache_key, "/aviasales/v3/prices_for_dates", params)
 
-        if data and isinstance(data, dict) and data.get("success"):
-            return data.get("data", [])
+        if isinstance(data, dict) and data.get("success") is True and isinstance(data.get("data"), list):
+            if str(data.get("currency", "rub")).lower() == "rub":
+                return data["data"]
+        if strict:
+            raise RuntimeError("Aviasales response unavailable or invalid")
         return []
 
     async def search_destinations_on_date(

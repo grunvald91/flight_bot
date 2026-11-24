@@ -1,4 +1,7 @@
 import logging
+import html
+import re
+from zoneinfo import ZoneInfo
 from datetime import date, datetime
 
 from aiogram import F, Router
@@ -7,7 +10,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.config import MIN_PRICE_DROP
+from bot.config import MIN_PRICE_DROP, TIMEZONE
+from bot.keyboards.calendar_kb import calendar_keyboard
 from bot.keyboards.common_kb import (
     subscription_delete_confirm_keyboard,
     subscription_keyboard,
@@ -26,6 +30,7 @@ from database.crud import (
     remove_subscription,
     set_subscription_notifications,
     update_subscription_min_drop,
+    update_subscription_max_price,
     update_user_settings,
 )
 
@@ -40,6 +45,15 @@ SUBS_PAGE_SIZE = 8
 class ManageSubscriptionsStates(StatesGroup):
     waiting_min_price_drop = State()
     waiting_sub_min_drop = State()
+    waiting_max_price = State()
+
+
+class NewAlertStates(StatesGroup):
+    origin = State()
+    destination = State()
+    departure = State()
+    return_day = State()
+    target = State()
 
 
 def _parse_date_arg(text: str) -> date | None:
@@ -63,8 +77,8 @@ def _parse_min_price_drop_input(text: str) -> int | None:
     if not text:
         return None
 
-    normalized = "".join(ch for ch in text if ch.isdigit())
-    if not normalized:
+    normalized = text.strip().replace(" ", "").replace("\u00a0", "")
+    if not re.fullmatch(r"[0-9]{1,6}", normalized):
         return None
 
     value = int(normalized)
@@ -100,6 +114,7 @@ def _subscription_manage_keyboard(settings) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=notifications_text, callback_data=notifications_data)],
             [InlineKeyboardButton(text=direct_text, callback_data=direct_data)],
             [InlineKeyboardButton(text="📉 Мин. снижение цены", callback_data="submgr:min_drop")],
+            [InlineKeyboardButton(text="✉️ Проверить доставку", callback_data="alerttest:send")],
             [
                 InlineKeyboardButton(text="⏸ Пауза всех", callback_data="submgr:pause_all"),
                 InlineKeyboardButton(text="▶️ Возобновить все", callback_data="submgr:resume_all"),
@@ -132,6 +147,7 @@ def _min_drop_keyboard(current_value: int) -> InlineKeyboardMarkup:
 def _subscriptions_header_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Новое оповещение", callback_data="alertnew:start")],
             [InlineKeyboardButton(text="⚙️ Общие настройки", callback_data="submgr:open")],
             [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:back")],
         ]
@@ -144,14 +160,16 @@ def _sub_label(sub) -> str:
     label = f"{origin_name} → {dest_name}"
     if sub.depart_date:
         label += f" · {sub.depart_date.strftime('%d.%m')}"
+    if sub.return_date:
+        label += f"–{sub.return_date.strftime('%d.%m')}"
     if sub.last_price:
         label += f" · {format_price(sub.last_price)}"
     return label
 
 
-def _format_sub_card(sub, default_min_drop: int) -> str:
-    origin_name = city_resolver.get_city_name(sub.origin)
-    dest_name = city_resolver.get_city_name(sub.destination)
+def _format_sub_card(sub, default_min_drop: int, global_enabled: bool = True) -> str:
+    origin_name = html.escape(city_resolver.get_city_name(sub.origin))
+    dest_name = html.escape(city_resolver.get_city_name(sub.destination))
 
     status_lines = []
     if sub.is_paused:
@@ -159,6 +177,9 @@ def _format_sub_card(sub, default_min_drop: int) -> str:
     else:
         notif_state = "🔔 включены" if getattr(sub, "notify_enabled", True) is not False else "🔕 выключены"
         status_lines.append(f"✅ Слежение активно · Уведомления {notif_state}")
+
+    if not global_enabled:
+        status_lines[0] += "\n🔕 Общие оповещения отключены"
 
     date_line = (
         f"📅 Дата: <b>{sub.depart_date.strftime('%d.%m.%Y')}</b>"
@@ -181,9 +202,17 @@ def _format_sub_card(sub, default_min_drop: int) -> str:
         f"{date_line}\n"
         f"{price_line}\n"
     )
+    if sub.return_date:
+        text += f"↩️ Обратно: <b>{sub.return_date.strftime('%d.%m.%Y')}</b>\n"
+    if sub.last_checked_at:
+        text += f"🕒 Последняя найденная цена: {sub.last_checked_at.strftime('%d.%m %H:%M')} UTC\n"
+    text += "Проверка: каждый час. Источник — кэш Aviasales.\n"
     if sub.max_price:
-        text += f"🎯 Лимит цены: <b>{format_price(sub.max_price)}</b>\n"
+        met = " · достигнута" if sub.last_price and sub.last_price <= sub.max_price else ""
+        text += f"🎯 Целевая цена: <b>{format_price(sub.max_price)}</b>{met}\n"
     text += f"📉 Уведомлю при снижении от <b>{format_price(threshold)}</b>{threshold_note}"
+    if sub.max_price:
+        text += " или при достижении целевой цены."
     return text
 
 
@@ -220,7 +249,7 @@ async def _show_subscription_card(
 
     settings = await get_user_settings(telegram_id)
     default_min = settings.min_price_drop if settings and settings.min_price_drop else MIN_PRICE_DROP
-    text = _format_sub_card(sub, default_min)
+    text = _format_sub_card(sub, default_min, _notifications_enabled(settings))
 
     keyboard = subscription_keyboard(
         sub.id,
@@ -249,14 +278,15 @@ async def _show_subscriptions_list(
 ) -> None:
     subscriptions = await get_subscriptions(telegram_id)
     total = len(subscriptions)
+    settings = await get_user_settings(telegram_id)
+    global_status = "включены" if _notifications_enabled(settings) else "отключены"
 
     if total == 0:
         text = (
-            "<b>🔔 Слежение за ценой</b>\n\n"
+            f"<b>🔔 Оповещения</b>\nУведомления {global_status} · каждый час\n\n"
             "У вас пока нет активных подписок.\n\n"
-            "Создать подписку:\n"
-            "• нажмите <b>«Следить за ценой»</b> в результатах поиска\n"
-            "• или команда <code>/subscribe Москва-Стамбул</code>"
+            "Нажмите «Новое оповещение» или «Следить за ценой» под билетом.\n"
+            "Проверка цен каждый час."
         )
         keyboard = _subscriptions_header_keyboard()
         if edit:
@@ -280,7 +310,8 @@ async def _show_subscriptions_list(
     )
 
     text_lines = [
-        f"<b>🔔 Слежение за ценой ({total})</b>",
+        f"<b>🔔 Оповещения ({total})</b>",
+        f"Уведомления {global_status} · проверка каждый час",
         "",
         f"Активных: <b>{active}</b> · На паузе: <b>{paused}</b>" + (f" · Без уведомлений: <b>{muted}</b>" if muted else ""),
         "",
@@ -481,6 +512,9 @@ async def cb_add_subscription(callback: CallbackQuery):
 
     origin = parts[1]
     destination = parts[2]
+    if not re.fullmatch(r"[A-Z]{3}", origin) or not re.fullmatch(r"[A-Z]{3}", destination) or origin == destination:
+        await callback.answer("Некорректный маршрут", show_alert=True)
+        return
 
     depart_date = None
     return_date = None
@@ -497,6 +531,16 @@ async def cb_add_subscription(callback: CallbackQuery):
         except ValueError:
             pass
 
+    if (len(parts) > 3 and parts[3] and depart_date is None) or (len(parts) > 4 and parts[4] and return_date is None):
+        await callback.answer("Некорректная дата", show_alert=True)
+        return
+    if depart_date and depart_date < _alert_today():
+        await callback.answer("Дата уже прошла", show_alert=True)
+        return
+    if return_date and (not depart_date or return_date < depart_date):
+        await callback.answer("Некорректная дата возвращения", show_alert=True)
+        return
+    await _ensure_user(callback.from_user)
     added = await add_subscription(
         callback.from_user.id,
         origin,
@@ -513,9 +557,16 @@ async def cb_add_subscription(callback: CallbackQuery):
         if depart_date:
             message += f" ({depart_date.strftime('%d.%m')})"
         await callback.answer(message)
+        if callback.message and callback.message.chat.type == "private":
+            await _show_subscriptions_list(callback.message, callback.from_user.id, edit=False)
+        else:
+            try:
+                await _send_subscriptions(callback.bot, callback.from_user.id)
+            except Exception:
+                logger.info("Subscription created; user must start private chat to receive messages")
         return
 
-    await callback.answer("Такая подписка уже есть")
+    await callback.answer("Такая подписка уже есть. Настройки — в разделе «Оповещения».")
 
 
 @router.callback_query(F.data.startswith("unsub:"))
@@ -668,6 +719,9 @@ async def process_manage_min_price_drop(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "menu:subscriptions")
 async def cb_subscriptions(callback: CallbackQuery, state: FSMContext):
+    if not callback.message or callback.message.chat.type != "private":
+        await callback.answer("Откройте личный чат с ботом", show_alert=True)
+        return
     await state.clear()
     await _show_subscriptions_list(callback.message, callback.from_user.id, page=0, edit=True)
     await callback.answer()
@@ -675,7 +729,11 @@ async def cb_subscriptions(callback: CallbackQuery, state: FSMContext):
 
 @router.message(Command("subscriptions"))
 async def cmd_subscriptions(message: Message, state: FSMContext):
+    if message.chat.type != "private":
+        await message.answer("Откройте личный чат с ботом, чтобы управлять оповещениями.")
+        return
     await state.clear()
+    await _ensure_user(message.from_user)
     await _show_subscriptions_list(message, message.from_user.id, page=0, edit=False)
 
 
@@ -868,7 +926,12 @@ async def cb_subact_mindropset(callback: CallbackQuery):
         await callback.answer("Ошибка значения", show_alert=True)
         return
 
-    await update_subscription_min_drop(sub_id, callback.from_user.id, value)
+    if not 100 <= value <= 200000:
+        await callback.answer("Сумма вне допустимого диапазона", show_alert=True)
+        return
+    if not await update_subscription_min_drop(sub_id, callback.from_user.id, value):
+        await callback.answer("Оповещение не найдено", show_alert=True)
+        return
     await _show_subscription_card(callback.message, callback.from_user.id, sub_id, edit=True)
     await callback.answer(f"Обновлено: {format_price(value)}")
 
@@ -926,3 +989,264 @@ async def process_sub_min_drop(message: Message, state: FSMContext):
         parse_mode="HTML",
     )
     await _show_subscription_card(message, message.from_user.id, sub_id, edit=False)
+
+
+TARGET_PRESETS = (5000, 10000, 15000, 25000, 50000)
+
+
+def _target_price(text: str) -> int | None:
+    raw = text.strip().replace(" ", "").replace("\u00a0", "")
+    if not re.fullmatch(r"[0-9]{1,8}", raw):
+        return None
+    value = int(raw)
+    return value if 100 <= value <= 10_000_000 else None
+
+
+def _alert_buttons(*pairs):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=text, callback_data=data)] for text, data in pairs
+    ])
+
+
+def _target_keyboard(prefix: str, back: str):
+    return _alert_buttons(*[(format_price(v), f"{prefix}:{v}") for v in TARGET_PRESETS],
+                          ("Без целевой цены", f"{prefix}:none"), ("Назад", back))
+
+
+def _alert_today():
+    return datetime.now(ZoneInfo(TIMEZONE)).date()
+
+
+def _resolve_alert_city(text):
+    code = city_resolver.resolve(text.strip())
+    return code if code and re.fullmatch(r"[A-Z]{3}", code) else None
+
+
+@router.callback_query(F.data == "alertnew:start")
+async def alert_new_start(callback: CallbackQuery, state: FSMContext):
+    if not callback.message or callback.message.chat.type != "private":
+        await callback.answer("Откройте личный чат с ботом", show_alert=True)
+        return
+    await callback.answer()
+    await _ensure_user(callback.from_user)
+    await state.clear()
+    await state.set_state(NewAlertStates.origin)
+    await callback.message.answer("🔔 <b>Новое оповещение</b>\nОткуда летите? Введите город.",
+        reply_markup=_alert_buttons(("Отмена", "sublist:open")))
+
+
+@router.message(NewAlertStates.origin, F.text)
+async def alert_origin(message: Message, state: FSMContext):
+    origin = _resolve_alert_city(message.text)
+    if not origin:
+        await message.answer("Город не найден. Введите другое название.")
+        return
+    await state.update_data(alert_origin=origin)
+    await state.set_state(NewAlertStates.destination)
+    await message.answer("Куда летите? Введите город назначения.",
+        reply_markup=_alert_buttons(("Отмена", "sublist:open")))
+
+
+@router.message(NewAlertStates.destination, F.text)
+async def alert_destination(message: Message, state: FSMContext):
+    destination = _resolve_alert_city(message.text)
+    origin = (await state.get_data()).get("alert_origin")
+    if not destination or destination == origin:
+        await message.answer("Укажите другой город назначения.")
+        return
+    await state.update_data(alert_destination=destination)
+    await state.set_state(NewAlertStates.departure)
+    markup = calendar_keyboard("alertdep")
+    await message.answer("Выберите дату вылета или ближайшие 30 дней.", reply_markup=markup)
+
+
+async def _ask_target(message: Message, state: FSMContext):
+    await state.set_state(NewAlertStates.target)
+    await message.answer("🎯 Целевая цена за билет (₽). Выберите сумму, введите свою или пропустите.",
+        reply_markup=_target_keyboard("alertnew:target", "sublist:open"))
+
+
+@router.callback_query(NewAlertStates.departure, F.data == "alertnew:anydate")
+async def alert_any_date(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.update_data(alert_departure=None, alert_return=None)
+    await _ask_target(callback.message, state)
+
+
+@router.callback_query(NewAlertStates.departure, F.data.startswith("caldate:alertdep:"))
+async def alert_departure(callback: CallbackQuery, state: FSMContext):
+    try:
+        selected = date.fromisoformat(callback.data.rsplit(":", 1)[-1])
+    except ValueError:
+        await callback.answer("Некорректная дата", show_alert=True)
+        return
+    if selected < _alert_today():
+        await callback.answer("Дата уже прошла", show_alert=True)
+        return
+    await callback.answer()
+    await state.update_data(alert_departure=selected.isoformat())
+    await state.set_state(NewAlertStates.return_day)
+    markup = calendar_keyboard("alertret", selected.year, selected.month)
+    await callback.message.answer("Выберите дату возвращения или билет в одну сторону.", reply_markup=markup)
+
+
+@router.callback_query(NewAlertStates.return_day, F.data == "alertnew:oneway")
+async def alert_one_way(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.update_data(alert_return=None)
+    await _ask_target(callback.message, state)
+
+
+@router.callback_query(NewAlertStates.return_day, F.data.startswith("caldate:alertret:"))
+async def alert_return_date(callback: CallbackQuery, state: FSMContext):
+    try:
+        selected = date.fromisoformat(callback.data.rsplit(":", 1)[-1])
+        departure = date.fromisoformat((await state.get_data()).get("alert_departure", ""))
+    except (ValueError, TypeError):
+        await callback.answer("Некорректная дата", show_alert=True)
+        return
+    if selected < departure:
+        await callback.answer("Возвращение раньше вылета", show_alert=True)
+        return
+    await callback.answer()
+    await state.update_data(alert_return=selected.isoformat())
+    await _ask_target(callback.message, state)
+
+
+async def _save_new_alert(message: Message, state: FSMContext, user, target):
+    data = await state.get_data()
+    origin, destination = data.get("alert_origin"), data.get("alert_destination")
+    if not origin or not destination:
+        await state.clear()
+        await message.answer("Поиск устарел.", reply_markup=_subscriptions_header_keyboard())
+        return
+    departure = date.fromisoformat(data["alert_departure"]) if data.get("alert_departure") else None
+    return_day = date.fromisoformat(data["alert_return"]) if data.get("alert_return") else None
+    if departure and departure < _alert_today():
+        await state.clear()
+        await message.answer("Дата уже прошла.", reply_markup=_subscriptions_header_keyboard())
+        return
+    await _ensure_user(user)
+    added = await add_subscription(user.id, origin, destination, max_price=target,
+                                   depart_date=departure, return_date=return_day)
+    await state.clear()
+    settings = await get_user_settings(user.id)
+    text = "✅ Оповещение создано. Проверка каждый час." if added else "Такое оповещение уже есть. Измените условия в карточке."
+    if not _notifications_enabled(settings):
+        text += "\nОбщие оповещения выключены. Включите их в настройках."
+    await message.answer(text)
+    await _show_subscriptions_list(message, user.id, edit=False)
+
+
+@router.callback_query(NewAlertStates.target, F.data.startswith("alertnew:target:"))
+async def alert_target_button(callback: CallbackQuery, state: FSMContext):
+    raw = callback.data.rsplit(":", 1)[-1]
+    target = None if raw == "none" else _target_price(raw)
+    if raw != "none" and target is None:
+        await callback.answer("Некорректная сумма", show_alert=True)
+        return
+    await callback.answer()
+    await _save_new_alert(callback.message, state, callback.from_user, target)
+
+
+@router.message(NewAlertStates.target, F.text)
+async def alert_target_text(message: Message, state: FSMContext):
+    target = _target_price(message.text)
+    if target is None:
+        await message.answer("Введите сумму от 100 до 10 000 000 ₽.")
+        return
+    await _save_new_alert(message, state, message.from_user, target)
+
+
+@router.callback_query(F.data.regexp(r"^alertlimit:[0-9]+$"))
+async def alert_edit_limit(callback: CallbackQuery, state: FSMContext):
+    sub_id = int(callback.data.split(":")[1])
+    if not await get_subscription(sub_id, callback.from_user.id):
+        await callback.answer("Оповещение не найдено", show_alert=True)
+        return
+    await state.clear()
+    await state.set_state(ManageSubscriptionsStates.waiting_max_price)
+    await state.update_data(alert_sub_id=sub_id)
+    await callback.answer()
+    await callback.message.answer("🎯 Выберите целевую цену или введите сумму в рублях.",
+        reply_markup=_target_keyboard(f"alertlimitset:{sub_id}", f"subcard:{sub_id}"))
+
+
+@router.callback_query(ManageSubscriptionsStates.waiting_max_price, F.data.startswith("alertlimitset:"))
+async def alert_set_limit_button(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(":")
+    if len(parts) != 3 or not parts[1].isdigit():
+        await callback.answer("Некорректная кнопка", show_alert=True)
+        return
+    sub_id = int(parts[1])
+    if sub_id != (await state.get_data()).get("alert_sub_id"):
+        await callback.answer("Откройте настройки заново", show_alert=True)
+        return
+    raw = parts[2]
+    target = None if raw == "none" else _target_price(raw)
+    if raw != "none" and target is None:
+        await callback.answer("Некорректная сумма", show_alert=True)
+        return
+    ok = await update_subscription_max_price(sub_id, callback.from_user.id, target)
+    await state.clear()
+    await callback.answer("Сохранено" if ok else "Оповещение не найдено", show_alert=not ok)
+    if ok:
+        await _show_subscription_card(callback.message, callback.from_user.id, sub_id, edit=True)
+
+
+@router.message(ManageSubscriptionsStates.waiting_max_price, F.text)
+async def alert_set_limit_text(message: Message, state: FSMContext):
+    target = _target_price(message.text)
+    if target is None:
+        await message.answer("Введите сумму от 100 до 10 000 000 ₽.")
+        return
+    sub_id = (await state.get_data()).get("alert_sub_id")
+    await state.clear()
+    if sub_id and await update_subscription_max_price(sub_id, message.from_user.id, target):
+        await _show_subscription_card(message, message.from_user.id, sub_id, edit=False)
+    else:
+        await message.answer("Оповещение не найдено.", reply_markup=_subscriptions_header_keyboard())
+
+
+@router.callback_query(F.data == "alerttest:send")
+async def alert_test_delivery(callback: CallbackQuery):
+    if not callback.message or callback.message.chat.type != "private":
+        await callback.answer("Откройте личный чат с ботом", show_alert=True)
+        return
+    try:
+        await callback.bot.send_message(callback.from_user.id,
+            "🔔 <b>Тестовое оповещение</b>\nДоставка сообщений работает. Это тест, а не изменение цены.")
+    except Exception:
+        await callback.answer("Не удалось доставить тестовое сообщение", show_alert=True)
+        return
+    await callback.answer("Тест отправлен")
+
+
+@router.callback_query(F.data.regexp(r"^alertcheck:[0-9]+$"))
+async def alert_check_now(callback: CallbackQuery):
+    from bot.services.scheduler import check_subscription
+    if not callback.message or callback.message.chat.type != "private":
+        await callback.answer("Откройте личный чат с ботом", show_alert=True)
+        return
+    await callback.answer("Проверяю цену…")
+    try:
+        status = await check_subscription(callback.bot, int(callback.data.split(":")[1]), callback.from_user.id, manual=True)
+    except Exception:
+        logger.exception("Manual subscription check failed")
+        status = "error"
+    messages = {
+        "ok": "✅ Цена проверена.",
+        "recent": "Цена уже проверена менее минуты назад.",
+        "paused": "Оповещение на паузе. Сначала возобновите слежение.",
+        "no_data": "В кэше Aviasales нет цены по заданным условиям. Прежняя цена сохранена.",
+        "busy": "Уже выполняется проверка. Попробуйте чуть позже.",
+        "delivery_failed": "Цена получена, но отправить оповещение не удалось. Проверка повторится.",
+        "settings_changed": "Настройки изменились во время проверки. Запустите проверку снова.",
+        "missing": "Оповещение не найдено.",
+        "expired": "Дата вылета прошла. Слежение завершено.",
+        "error": "Источник цен временно недоступен. Прежняя цена сохранена.",
+    }
+    await callback.message.answer(messages.get(status, "Проверка не завершена."))
+    if not await _show_subscription_card(callback.message, callback.from_user.id,
+            int(callback.data.split(":")[1]), edit=True):
+        await _show_subscriptions_list(callback.message, callback.from_user.id, edit=True)

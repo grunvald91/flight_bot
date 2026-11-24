@@ -106,8 +106,12 @@ async def add_subscription(telegram_id: int, origin: str, destination: str,
         else:
             query = query.where(PriceSubscription.depart_date.is_(None))
 
+        if return_date is not None:
+            query = query.where(PriceSubscription.return_date == return_date)
+        else:
+            query = query.where(PriceSubscription.return_date.is_(None))
         existing = await session.execute(query)
-        if existing.scalar_one_or_none():
+        if existing.scalars().first():
             return False
 
         session.add(PriceSubscription(
@@ -213,6 +217,24 @@ async def update_subscription_min_drop(sub_id: int, telegram_id: int, min_drop: 
                 PriceSubscription.is_active == True,
             )
             .values(min_price_drop=min_drop)
+        )
+        await session.commit()
+        return result.rowcount > 0
+
+
+async def update_subscription_max_price(sub_id: int, telegram_id: int, max_price: int | None) -> bool:
+    if max_price is not None and not 100 <= max_price <= 10_000_000:
+        raise ValueError("Invalid target price")
+    async with async_session_maker() as session:
+        user = await _get_user(session, telegram_id)
+        if not user:
+            return False
+        result = await session.execute(
+            update(PriceSubscription).where(
+                PriceSubscription.id == sub_id,
+                PriceSubscription.user_id == user.id,
+                PriceSubscription.is_active == True,
+            ).values(max_price=max_price)
         )
         await session.commit()
         return result.rowcount > 0
