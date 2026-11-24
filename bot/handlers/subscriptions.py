@@ -181,6 +181,11 @@ def _format_sub_card(sub, default_min_drop: int) -> str:
         f"{date_line}\n"
         f"{price_line}\n"
     )
+    if sub.return_date:
+        text += f"↩️ Обратно: <b>{sub.return_date.strftime('%d.%m.%Y')}</b>\n"
+    if sub.last_checked_at:
+        text += f"🕒 Последняя успешная проверка: {sub.last_checked_at.strftime('%d.%m %H:%M')} UTC\n"
+    text += "Проверка: каждый час. Цены ориентировочные.\n"
     if sub.max_price:
         text += f"🎯 Лимит цены: <b>{format_price(sub.max_price)}</b>\n"
     text += f"📉 Уведомлю при снижении от <b>{format_price(threshold)}</b>{threshold_note}"
@@ -497,6 +502,13 @@ async def cb_add_subscription(callback: CallbackQuery):
         except ValueError:
             pass
 
+    if (len(parts) > 3 and parts[3] and depart_date is None) or (len(parts) > 4 and parts[4] and return_date is None):
+        await callback.answer("Некорректная дата", show_alert=True)
+        return
+    if return_date and (not depart_date or return_date < depart_date):
+        await callback.answer("Некорректная дата возвращения", show_alert=True)
+        return
+    await _ensure_user(callback.from_user)
     added = await add_subscription(
         callback.from_user.id,
         origin,

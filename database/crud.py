@@ -106,8 +106,12 @@ async def add_subscription(telegram_id: int, origin: str, destination: str,
         else:
             query = query.where(PriceSubscription.depart_date.is_(None))
 
+        if return_date is not None:
+            query = query.where(PriceSubscription.return_date == return_date)
+        else:
+            query = query.where(PriceSubscription.return_date.is_(None))
         existing = await session.execute(query)
-        if existing.scalar_one_or_none():
+        if existing.scalars().first():
             return False
 
         session.add(PriceSubscription(

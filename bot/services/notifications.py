@@ -1,4 +1,5 @@
 import logging
+import html
 
 from aiogram import Bot
 
@@ -14,8 +15,8 @@ logger = logging.getLogger(__name__)
 async def notify_price_drop(bot: Bot, telegram_id: int, sub: PriceSubscription,
                             current_price: int, ticket: dict):
     """Отправляет уведомление о снижении цены."""
-    origin_name = city_resolver.get_city_name(sub.origin)
-    dest_name = city_resolver.get_city_name(sub.destination)
+    origin_name = html.escape(city_resolver.get_city_name(sub.origin))
+    dest_name = html.escape(city_resolver.get_city_name(sub.destination))
 
     old_price_str = format_price(sub.last_price) if sub.last_price else "неизвестно"
     new_price_str = format_price(current_price)
@@ -26,11 +27,15 @@ async def notify_price_drop(bot: Bot, telegram_id: int, sub: PriceSubscription,
         diff = f"\n   Экономия: {format_price(saved)}"
 
     depart = format_date_full(ticket.get("departure_at", ""))
-    transfers = format_transfers(ticket.get("transfers", 0))
+    stops = ticket.get("transfers", ticket.get("number_of_changes"))
+    transfers = format_transfers(stops) if isinstance(stops, int) else "Пересадки не указаны"
     airline_code = ticket.get("airline", "")
-    airline = city_resolver.get_airline_name(airline_code) if airline_code else ""
+    airline = html.escape(city_resolver.get_airline_name(airline_code) or "") if airline_code else ""
 
-    search_link = aviasales_api.build_search_link(sub.origin, sub.destination)
+    departure = str(ticket.get("departure_at") or "")[:10]
+    return_day = sub.return_date.isoformat() if sub.return_date else None
+    search_link = aviasales_api.build_ticket_link(ticket, sub.origin, sub.destination, departure, return_day)
+    title = "Цена снизилась!" if sub.last_price and current_price < sub.last_price else "Цена достигла вашего лимита!"
 
     # Информация о дате подписки
     sub_date_info = ""
@@ -40,17 +45,20 @@ async def notify_price_drop(bot: Bot, telegram_id: int, sub: PriceSubscription,
         sub_date_info = "\n   Мониторинг: ближайшие 30 дней"
 
     text = (
-        f"   <b>Цена снизилась!</b>\n\n"
+        f"🔔 <b>{title}</b>\n\n"
         f"   {origin_name} ({sub.origin}) -> {dest_name} ({sub.destination}){sub_date_info}\n"
         f"   Было: {old_price_str}\n"
         f"   Стало: <b>{new_price_str}</b>{diff}\n"
     )
+    if return_day:
+        text += f"   Обратно: {return_day}\n"
+    text += "   Цена из кэша Aviasales; уточните перед покупкой.\n"
     if airline:
         text += f"   {airline}\n"
     if depart:
         text += f"   {depart}\n"
     text += f"   {transfers}\n"
-    text += f"\n   <a href=\"{search_link}\">Купить на Aviasales</a>"
+    text += f"\n   <a href=\"{html.escape(search_link, quote=True)}\">Купить на Aviasales</a>"
 
     try:
         await bot.send_message(
@@ -61,10 +69,12 @@ async def notify_price_drop(bot: Bot, telegram_id: int, sub: PriceSubscription,
             reply_markup=ticket_keyboard(
                 search_link, sub.origin, sub.destination,
                 f"{sub.origin}-{sub.destination}",
-                depart_date=sub.depart_date.strftime("%Y-%m-%d") if sub.depart_date else None,
+                depart_date=departure or None,
                 return_date=sub.return_date.strftime("%Y-%m-%d") if sub.return_date else None,
             ),
         )
         logger.info("Price drop notification sent to %d: %s-%s", telegram_id, sub.origin, sub.destination)
+        return True
     except Exception as e:
         logger.error("Failed to send notification to %d: %s", telegram_id, e)
+        return False

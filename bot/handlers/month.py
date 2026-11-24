@@ -15,6 +15,10 @@ from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from zoneinfo import ZoneInfo
+from bot.config import TIMEZONE
+from bot.services.flexible_trips import daily_foreign
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot.keyboards.common_kb import persistent_menu_keyboard
@@ -321,3 +325,80 @@ async def _render(origin: str, destination: str, direct_only: bool, page: int) -
     ]
     text = f"{header}\nВсего вариантов: {len(tickets)}\n\n" + "\n".join(lines)
     return text, _keyboard(origin, destination, direct_only, page, pages)
+
+
+class FlexibleStates(StatesGroup):
+    origin = State()
+    duration = State()
+
+
+@router.callback_query(F.data == "flex:start")
+async def flex_start(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await start_flexible(callback.message, state)
+
+
+async def start_flexible(message: Message, state: FSMContext):
+    await state.clear()
+    await state.set_state(FlexibleStates.origin)
+    await message.answer("🌍 Из какого города вылетаете? Введите город или IATA-код.")
+
+
+@router.message(FlexibleStates.origin, F.text)
+async def flex_origin(message: Message, state: FSMContext):
+    origin = city_resolver.resolve(message.text.strip())
+    if not origin or not _IATA_RE.fullmatch(origin) or not city_resolver.get_country_code(origin):
+        await message.answer("Не удалось определить город вылета. Попробуйте ещё раз.")
+        return
+    await state.update_data(flex_origin=origin)
+    await state.set_state(FlexibleStates.duration)
+    rows = [[InlineKeyboardButton(text="В одну сторону · каждый день", callback_data="flex:0")]]
+    for a, b in ((3, 5), (7, 10)):
+        rows.append([InlineKeyboardButton(text=f"{n} ночей", callback_data=f"flex:{n}") for n in (a,b)])
+    rows.append([InlineKeyboardButton(text="14 ночей", callback_data="flex:14")])
+    rows.append([InlineKeyboardButton(text="🏠 Меню", callback_data="menu:back")])
+    await message.answer("Выберите длительность. Для поездки туда-обратно покажу общую цену авиабилетов за каждую дату вылета.", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+@router.callback_query(FlexibleStates.duration, F.data.regexp(r"^flex:(0|3|5|7|10|14)$"))
+async def flex_duration(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    origin = (await state.get_data()).get("flex_origin")
+    await state.clear()
+    if not origin:
+        return
+    nights = int(callback.data.split(":")[1])
+    direct = await load_direct_only(callback.from_user.id)
+    progress = await callback.message.answer("⏳ Проверяю 30 дат вылета по данным Aviasales…")
+    rows = await daily_foreign(origin, datetime.now(ZoneInfo(TIMEZONE)).date(), nights, direct)
+    valid = [row for row in rows if row[2] is not None]
+    best = min(valid, key=lambda row: row[2]["price"]) if valid else None
+    header = f"🌍 <b>За границу из {html.escape(city_resolver.get_city_name(origin))}</b>\n"
+    header += f"{nights} ночей · туда-обратно" if nights else "В одну сторону · на каждый день"
+    if direct:
+        header += " · без пересадок"
+    if best:
+        header += f"\n🏆 Лучшее из найденного: {format_date_short(best[0])} · {html.escape(city_resolver.get_city_name(best[2]['destination']))} · {format_price(best[2]['price'])}"
+    header += "\nЦены из кэша Aviasales, наличие и стоимость уточняются при покупке.\n"
+    await progress.edit_text(header, disable_web_page_preview=True)
+    for offset in range(0, len(rows), 10):
+        lines = []
+        for departure, return_day, ticket, failed in rows[offset:offset+10]:
+            label = format_date_short(departure)
+            if return_day:
+                label += "–" + format_date_short(return_day)
+            if not ticket:
+                lines.append(f"{label} · {'ошибка источника' if failed else 'нет данных'}")
+                continue
+            dest = ticket["destination"]
+            link = aviasales_api.build_ticket_link(ticket, origin, dest, departure, return_day)
+            city = html.escape(city_resolver.get_city_name(dest))
+            lines.append(f'{label} · <a href="{html.escape(link, quote=True)}">{city} · {format_price(ticket["price"])}</a>')
+        await callback.message.answer("\n".join(lines), disable_web_page_preview=True)
+    buttons = []
+    if best:
+        dest = best[2]["destination"]
+        buttons.append([InlineKeyboardButton(text="🔔 Следить за лучшим маршрутом", callback_data=f"sub:{origin}:{dest}:{best[0]}:{best[1] or ''}")])
+    buttons.extend([[InlineKeyboardButton(text="🌍 Новый поиск", callback_data="flex:start")],
+                    [InlineKeyboardButton(text="🏠 Меню", callback_data="menu:back")]])
+    await callback.message.answer("Действия:", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
