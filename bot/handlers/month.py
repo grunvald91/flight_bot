@@ -335,9 +335,13 @@ class FlexibleStates(StatesGroup):
 @router.callback_query(F.data == "flex:start")
 async def flex_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
+    await start_flexible(callback.message, state)
+
+
+async def start_flexible(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(FlexibleStates.origin)
-    await callback.message.answer("🌍 Из какого города вылетаете? Введите город или IATA-код.")
+    await message.answer("🌍 Из какого города вылетаете? Введите город или IATA-код.")
 
 
 @router.message(FlexibleStates.origin, F.text)

@@ -144,3 +144,15 @@ async def test_cheapest_30_day_window_has_no_extra_day_or_fake_nonstop(api):
     }
     assert [row["transfers"] for row in results] == [None, 1]
     assert sorted(set(calls)) == ["2026-11", "2026-12"]
+
+
+def test_roundtrip_destinations_query(api):
+    calls = install_pages(api, {
+        1: {"success": True, "data": [{"destination": "IST"}]},
+    })
+    result = asyncio.run(api.search_destinations_on_date(
+        "MOW", "2026-12-01", return_date="2026-12-06"))
+    assert result == [{"destination": "IST"}]
+    assert calls[0][2]["return_at"] == "2026-12-06"
+    assert calls[0][2]["one_way"] == "false"
+    assert ":return:2026-12-06" in calls[0][0]

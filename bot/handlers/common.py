@@ -111,6 +111,12 @@ async def persistent_browse(message: Message, state: FSMContext):
     await _start_browse(message, state)
 
 
+@router.message(F.text == "🌍 За границу по дням")
+async def persistent_flexible(message: Message, state: FSMContext):
+    from bot.handlers.month import start_flexible
+    await start_flexible(message, state)
+
+
 @router.message(F.text == "📅 Дешёвые на месяц")
 async def persistent_month(message: Message, state: FSMContext):
     from bot.handlers.month import _start as _start_month

@@ -1,4 +1,5 @@
 import logging
+import html
 
 from aiogram import Bot
 
@@ -14,8 +15,8 @@ logger = logging.getLogger(__name__)
 async def notify_price_drop(bot: Bot, telegram_id: int, sub: PriceSubscription,
                             current_price: int, ticket: dict):
     """Отправляет уведомление о снижении цены."""
-    origin_name = city_resolver.get_city_name(sub.origin)
-    dest_name = city_resolver.get_city_name(sub.destination)
+    origin_name = html.escape(city_resolver.get_city_name(sub.origin))
+    dest_name = html.escape(city_resolver.get_city_name(sub.destination))
 
     old_price_str = format_price(sub.last_price) if sub.last_price else "неизвестно"
     new_price_str = format_price(current_price)
@@ -26,9 +27,10 @@ async def notify_price_drop(bot: Bot, telegram_id: int, sub: PriceSubscription,
         diff = f"\n   Экономия: {format_price(saved)}"
 
     depart = format_date_full(ticket.get("departure_at", ""))
-    transfers = format_transfers(ticket.get("transfers", 0))
+    stops = ticket.get("transfers", ticket.get("number_of_changes"))
+    transfers = format_transfers(stops) if isinstance(stops, int) else "Пересадки не указаны"
     airline_code = ticket.get("airline", "")
-    airline = city_resolver.get_airline_name(airline_code) if airline_code else ""
+    airline = html.escape(city_resolver.get_airline_name(airline_code) or "") if airline_code else ""
 
     departure = str(ticket.get("departure_at") or "")[:10]
     return_day = sub.return_date.isoformat() if sub.return_date else None
@@ -56,7 +58,7 @@ async def notify_price_drop(bot: Bot, telegram_id: int, sub: PriceSubscription,
     if depart:
         text += f"   {depart}\n"
     text += f"   {transfers}\n"
-    text += f"\n   <a href=\"{search_link}\">Купить на Aviasales</a>"
+    text += f"\n   <a href=\"{html.escape(search_link, quote=True)}\">Купить на Aviasales</a>"
 
     try:
         await bot.send_message(
