@@ -15,6 +15,7 @@ from bot.handlers import admin, browse, calendar, common, discover, entry, inlin
 from bot.middlewares.logging_mw import RequestLoggingMiddleware
 from bot.services.city_resolver import city_resolver
 from bot.services.scheduler import setup_scheduler
+from bot.handlers import smart_alerts
 from bot.widgets.browse import WidgetDispatcher, enabled as widgets_enabled, probe_widget_api
 from database.database import init_db
 
@@ -100,6 +101,7 @@ async def main():
     dp.include_router(search.router)
     dp.include_router(favorites.router)
     dp.include_router(history.router)
+    dp.include_router(smart_alerts.router)
     dp.include_router(subscriptions.router)
 
     scheduler = await setup_scheduler(bot)

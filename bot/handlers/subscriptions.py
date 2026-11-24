@@ -148,6 +148,7 @@ def _subscriptions_header_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="➕ Новое оповещение", callback_data="alertnew:start")],
+            [InlineKeyboardButton(text="🌍 Умный мониторинг", callback_data="smart:list")],
             [InlineKeyboardButton(text="⚙️ Общие настройки", callback_data="submgr:open")],
             [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:back")],
         ]
