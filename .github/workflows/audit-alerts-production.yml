@@ -1,0 +1,51 @@
+name: Read-only production alert audit
+on:
+  push:
+    branches: [audit/alerts-production-20261124]
+    paths: [".github/workflows/audit-alerts-production.yml"]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Check deployed files and aggregate alert outcomes
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 188.120.254.223
+          username: root
+          password: ${{ secrets.FLIGHT_BOT_SSH_PASSWORD }}
+          command_timeout: 2m
+          script: |
+            set -e
+            cd /opt/flight_bot
+            systemctl is-active --quiet flight-bot
+            python3 - <<'PY'
+            import hashlib, pathlib, subprocess, re, os, sys
+            files = {
+                "bot/handlers/subscriptions.py": "7dc14b06465b30fa40767cd67980a65999f49e6e",
+                "bot/keyboards/common_kb.py": "d6333cee1a5e6b5b59201c88926d471adfd1ea73",
+                "bot/services/scheduler.py": "15153b4ec175debb0a999e06a74c65f35febec4d",
+                "bot/services/notifications.py": "c821258a1af7301926cbbb9dac17518ececb3618",
+            }
+            for path, expected in files.items():
+                data = pathlib.Path(path).read_bytes()
+                actual = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+                print(path, "matches release:", actual == expected)
+                if actual != expected:
+                    raise SystemExit("Unexpected file version")
+            start = subprocess.check_output(["systemctl","show","-p","ExecMainStartTimestamp","--value","flight-bot"],text=True).strip()
+            logs = subprocess.check_output(["journalctl","-u","flight-bot","--since",start,"--no-pager","-o","cat"],text=True)
+            counts = {
+                "scheduler started": logs.count("Scheduler started") > 0,
+                "price scans started": logs.count("Checking price subscriptions..."),
+                "completed scans": len(re.findall(r"Price check complete: [0-9]+ subscriptions",logs)),
+                "latest scanned subscription count": next(iter(re.findall(r"Price check complete: ([0-9]+) subscriptions",logs)[-1:]),"not recorded"),
+                "subscription errors": logs.count("Error checking subscription"),
+                "notification sends": logs.count("Price drop notification sent"),
+                "notification delivery errors": logs.count("Failed to send notification"),
+            }
+            for key,value in counts.items():
+                print(key + ":",value)
+            PY
