@@ -153,3 +153,14 @@ def test_strict_price_request_rejects_invalid_source(api):
     with pytest.raises(RuntimeError):
         asyncio.run(api.search_prices_for_dates("MOW","IST",strict=True))
     assert asyncio.run(api.search_prices_for_dates("MOW","IST")) == []
+
+
+def test_roundtrip_destination_pagination_uses_return_date(api):
+    calls = install_pages(api, {
+        1: {"success": True, "data": [{"destination": "IST"}]},
+    })
+    rows = asyncio.run(api.search_destinations_on_date("MOW", "2026-12-01", return_date="2026-12-06"))
+    assert rows == [{"destination": "IST"}]
+    assert calls[0][2]["one_way"] == "false"
+    assert calls[0][2]["return_at"] == "2026-12-06"
+    assert ":return:2026-12-06" in calls[0][0]

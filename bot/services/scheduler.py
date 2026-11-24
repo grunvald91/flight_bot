@@ -10,6 +10,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from bot.config import DAILY_CHANNEL_HOUR, DAILY_CHANNEL_MINUTE, MIN_PRICE_DROP, TIMEZONE
 from bot.services.aviasales_api import aviasales_api
 from bot.services.notifications import notify_price_drop
+from bot.services.smart_alerts import check_smart_alerts
 from bot.services.city_resolver import city_resolver
 from bot.services.channel_publisher import publish_tomorrow_channels
 from database.crud import get_all_active_subscriptions, update_subscription_price, deactivate_subscription, get_user_settings, get_subscription
@@ -32,6 +33,12 @@ async def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         max_instances=1,
         misfire_grace_time=900,
         next_run_time=datetime.now(ZoneInfo(TIMEZONE)) + timedelta(seconds=30),
+    )
+
+    scheduler.add_job(
+        check_smart_alerts, "interval", hours=1, args=[bot], id="smart_travel_alerts",
+        replace_existing=True, coalesce=True, max_instances=1, misfire_grace_time=900,
+        next_run_time=datetime.now(ZoneInfo(TIMEZONE)) + timedelta(minutes=2),
     )
 
     scheduler.add_job(

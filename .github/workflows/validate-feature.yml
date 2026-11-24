@@ -19,6 +19,10 @@ on:
       - "tests/test_travel_planner.py"
       - "tests/test_channel_publisher.py"
       - "bot/services/scheduler.py"
+      - "bot/services/smart_alerts.py"
+      - "bot/handlers/smart_alerts.py"
+      - "database/models.py"
+      - "tests/test_smart_alerts.py"
       - "bot/handlers/subscriptions.py"
       - "bot/services/notifications.py"
       - "bot/keyboards/calendar_kb.py"
@@ -65,7 +69,7 @@ jobs:
           DB_TYPE: sqlite
           DB_NAME: test_flight_bot
           PYTHONPATH: .
-        run: pytest -q tests/test_price_watch_flexible.py tests/test_management_buttons.py tests/test_channel_publisher.py tests/test_travel_planner.py tests/test_entry_rules.py tests/test_aviasales_api.py tests/test_month_search.py tests/test_widget_browse.py tests/test_widget_offers.py tests/test_widget_month.py
+        run: pytest -q tests/test_smart_alerts.py tests/test_price_watch_flexible.py tests/test_management_buttons.py tests/test_channel_publisher.py tests/test_travel_planner.py tests/test_entry_rules.py tests/test_aviasales_api.py tests/test_month_search.py tests/test_widget_browse.py tests/test_widget_offers.py tests/test_widget_month.py
 
       - name: HTML bubble UI smoke test
         run: |

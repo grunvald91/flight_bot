@@ -91,6 +91,28 @@ class PriceSubscription(Base):
     user: Mapped["User"] = relationship(back_populates="subscriptions")
 
 
+class SmartTravelAlert(Base):
+    """Independent saved international trip search. Existing route alerts are unchanged."""
+    __tablename__ = "smart_travel_alerts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.telegram_id", ondelete="CASCADE"), index=True)
+    origin: Mapped[str] = mapped_column(String(3))
+    nights: Mapped[int] = mapped_column(Integer)
+    horizon: Mapped[int] = mapped_column(Integer)
+    budget: Mapped[int] = mapped_column(Integer)
+    direct: Mapped[bool] = mapped_column(Boolean, default=False)
+    paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_offer: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    sent_prices: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(20), default="new")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint("telegram_id", "origin", "nights", "horizon", "budget", "direct", name="uq_smart_travel_rule"),
+    )
+
+
 class RequestLog(Base):
     __tablename__ = "request_logs"
 

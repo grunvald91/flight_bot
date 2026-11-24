@@ -106,7 +106,7 @@ def _subscription_manage_keyboard(settings) -> InlineKeyboardMarkup:
     notifications_text = "🔔 Уведомления: Вкл" if notifications_on else "🔕 Уведомления: Выкл"
     notifications_data = "submgr:notifications_off" if notifications_on else "submgr:notifications_on"
 
-    direct_text = "✈️ Прямые рейсы: Вкл" if direct_only else "✈️ Прямые рейсы: Выкл"
+    direct_text = "✈️ Прямые обычных подписок: Вкл" if direct_only else "✈️ Прямые обычных подписок: Выкл"
     direct_data = "submgr:direct_off" if direct_only else "submgr:direct_on"
 
     return InlineKeyboardMarkup(
@@ -148,6 +148,7 @@ def _subscriptions_header_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="➕ Новое оповещение", callback_data="alertnew:start")],
+            [InlineKeyboardButton(text="🌍 Умный мониторинг", callback_data="smart:list")],
             [InlineKeyboardButton(text="⚙️ Общие настройки", callback_data="submgr:open")],
             [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:back")],
         ]
@@ -347,6 +348,10 @@ async def _build_management_text(telegram_id: int) -> str:
 
     total = len(subscriptions)
     paused = len([sub for sub in subscriptions if sub.is_paused])
+    from bot.services.smart_alerts import list_rules
+    smart_rules = await list_rules(telegram_id)
+    total += len(smart_rules)
+    paused += sum(rule.paused for rule in smart_rules)
 
     return (
         "<b>⚙️ Управление подписками</b>\n\n"
@@ -641,13 +646,17 @@ async def cb_submgr_actions(callback: CallbackQuery, state: FSMContext):
         return
 
     if action == "pause_all":
+        from bot.services.smart_alerts import pause_all_rules
         changed = await pause_all_subscriptions(callback.from_user.id, paused=True)
+        changed += await pause_all_rules(callback.from_user.id, True)
         await _show_management(callback.message, callback.from_user.id, edit=True)
         await callback.answer(f"На паузу поставлено: {changed}")
         return
 
     if action == "resume_all":
+        from bot.services.smart_alerts import pause_all_rules
         changed = await pause_all_subscriptions(callback.from_user.id, paused=False)
+        changed += await pause_all_rules(callback.from_user.id, False)
         await _show_management(callback.message, callback.from_user.id, edit=True)
         await callback.answer(f"Возобновлено: {changed}")
         return

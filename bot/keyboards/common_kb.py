@@ -148,6 +148,7 @@ def subscriptions_list_keyboard(
         rows.append(nav)
 
     rows.insert(0, [InlineKeyboardButton(text="➕ Новое оповещение", callback_data="alertnew:start")])
+    rows.insert(1, [InlineKeyboardButton(text="🌍 Умный мониторинг", callback_data="smart:list")])
     rows.append([InlineKeyboardButton(text="⚙️ Общие настройки", callback_data="submgr:open")])
     rows.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:back")])
 
