@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from datetime import datetime, timedelta, date
 import math
 from zoneinfo import ZoneInfo
@@ -11,9 +12,10 @@ from bot.services.aviasales_api import aviasales_api
 from bot.services.notifications import notify_price_drop
 from bot.services.city_resolver import city_resolver
 from bot.services.channel_publisher import publish_tomorrow_channels
-from database.crud import get_all_active_subscriptions, update_subscription_price, deactivate_subscription, get_user_settings
+from database.crud import get_all_active_subscriptions, update_subscription_price, deactivate_subscription, get_user_settings, get_subscription
 
 logger = logging.getLogger(__name__)
+_price_check_lock = asyncio.Lock()
 
 
 async def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
@@ -29,6 +31,7 @@ async def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         coalesce=True,
         max_instances=1,
         misfire_grace_time=900,
+        next_run_time=datetime.now(ZoneInfo(TIMEZONE)) + timedelta(seconds=30),
     )
 
     scheduler.add_job(
@@ -108,7 +111,7 @@ async def _subscription_tickets(sub, today: date, direct: bool) -> list[dict]:
     for day in dates:
         tickets = await aviasales_api.search_prices_for_dates(
             origin=sub.origin, destination=sub.destination, depart_date=day,
-            return_date=return_day, one_way=not bool(return_day), direct=direct, limit=1000,
+            return_date=return_day, one_way=not bool(return_day), direct=direct, limit=1000, strict=True,
         )
         for ticket in tickets:
             if not isinstance(ticket, dict):
@@ -147,29 +150,55 @@ def _should_notify(sub, current_price: int, threshold: int) -> bool:
     return bool(drop or crossed)
 
 
+async def check_subscription(bot: Bot, sub_id: int, telegram_id: int, *, manual=False) -> str:
+    # Serialize checks so manual and scheduled jobs never notify from the same baseline.
+    if manual and _price_check_lock.locked():
+        return "busy"
+    async with _price_check_lock:
+        sub = await get_subscription(sub_id, telegram_id)
+        if not sub:
+            return "missing"
+        if sub.is_paused:
+            return "paused"
+        today = datetime.now(ZoneInfo(TIMEZONE)).date()
+        if sub.depart_date and sub.depart_date < today:
+            await deactivate_subscription(sub.id)
+            return "expired"
+        if manual and sub.last_checked_at and datetime.utcnow() - sub.last_checked_at < timedelta(minutes=1):
+            return "recent"
+        settings = await get_user_settings(telegram_id)
+        direct = bool(settings and settings.direct_flights_only)
+        tickets = await _subscription_tickets(sub, today, direct)
+        if not tickets:
+            return "no_data"
+        cheapest = min(tickets, key=lambda t: t["price"])
+        current_price = cheapest["price"]
+        # Reload after the external request, in case the owner muted or deleted it.
+        sub = await get_subscription(sub_id, telegram_id)
+        if not sub or sub.is_paused:
+            return "missing" if not sub else "paused"
+        settings = await get_user_settings(telegram_id)
+        if bool(settings and settings.direct_flights_only) != direct:
+            return "settings_changed"
+        threshold = sub.min_price_drop or getattr(settings, "min_price_drop", None) or MIN_PRICE_DROP
+        notifications_enabled = (getattr(settings, "notifications_enabled", True) is not False
+                                 and getattr(sub, "notify_enabled", True) is not False)
+        should_notify = _should_notify(sub, current_price, threshold)
+        if should_notify and notifications_enabled:
+            if not await notify_price_drop(bot, telegram_id, sub, current_price, cheapest):
+                return "delivery_failed"
+        await update_subscription_price(sub.id, current_price)
+        return "ok"
+
+
 async def check_price_subscriptions(bot: Bot):
     logger.info("Checking price subscriptions...")
     subs = await get_all_active_subscriptions()
-    today = datetime.now(ZoneInfo(TIMEZONE)).date()
     for sub, telegram_id in subs:
         try:
-            if sub.depart_date and sub.depart_date < today:
-                await deactivate_subscription(sub.id)
-                continue
-            settings = await get_user_settings(telegram_id)
-            direct = bool(settings and settings.direct_flights_only)
-            tickets = await _subscription_tickets(sub, today, direct)
-            if not tickets:
-                continue
-            cheapest = min(tickets, key=lambda t: t["price"])
-            current_price = cheapest["price"]
-            threshold = sub.min_price_drop or getattr(settings, "min_price_drop", None) or MIN_PRICE_DROP
-            enabled = (getattr(settings, "notifications_enabled", True) is not False
-                       and getattr(sub, "notify_enabled", True) is not False)
-            if enabled and _should_notify(sub, current_price, threshold):
-                if not await notify_price_drop(bot, telegram_id, sub, current_price, cheapest):
-                    continue
-            await update_subscription_price(sub.id, current_price)
+            status = await check_subscription(bot, sub.id, telegram_id)
+            if status == "delivery_failed":
+                logger.warning("Delivery failed for subscription %d", sub.id)
         except Exception as exc:
             logger.error("Error checking subscription %d: %s", sub.id, exc)
     logger.info("Price check complete: %d subscriptions", len(subs))

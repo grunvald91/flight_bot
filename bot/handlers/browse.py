@@ -415,6 +415,7 @@ def _selected_keyboard(
         [InlineKeyboardButton(text="🟣 Туту", callback_data=f"brtutu:{key}:{index}"),
          InlineKeyboardButton(text="✈️ Aviasales ↗", url=url)],
     ]
+    rows.append([InlineKeyboardButton(text="🔔 Следить за ценой", callback_data=f"sub:{option['origin']}:{option['destination']}:{departure_date[:10]}:")])
     country_code = str(option.get("country_code") or "").upper()
     if len(country_code) == 2:
         rows.append([

@@ -205,11 +205,14 @@ def _format_sub_card(sub, default_min_drop: int, global_enabled: bool = True) ->
     if sub.return_date:
         text += f"↩️ Обратно: <b>{sub.return_date.strftime('%d.%m.%Y')}</b>\n"
     if sub.last_checked_at:
-        text += f"🕒 Последняя успешная проверка: {sub.last_checked_at.strftime('%d.%m %H:%M')} UTC\n"
-    text += "Проверка: каждый час. Цены ориентировочные.\n"
+        text += f"🕒 Последняя найденная цена: {sub.last_checked_at.strftime('%d.%m %H:%M')} UTC\n"
+    text += "Проверка: каждый час. Источник — кэш Aviasales.\n"
     if sub.max_price:
-        text += f"🎯 Лимит цены: <b>{format_price(sub.max_price)}</b>\n"
+        met = " · достигнута" if sub.last_price and sub.last_price <= sub.max_price else ""
+        text += f"🎯 Целевая цена: <b>{format_price(sub.max_price)}</b>{met}\n"
     text += f"📉 Уведомлю при снижении от <b>{format_price(threshold)}</b>{threshold_note}"
+    if sub.max_price:
+        text += " или при достижении целевой цены."
     return text
 
 
@@ -531,6 +534,9 @@ async def cb_add_subscription(callback: CallbackQuery):
     if (len(parts) > 3 and parts[3] and depart_date is None) or (len(parts) > 4 and parts[4] and return_date is None):
         await callback.answer("Некорректная дата", show_alert=True)
         return
+    if depart_date and depart_date < _alert_today():
+        await callback.answer("Дата уже прошла", show_alert=True)
+        return
     if return_date and (not depart_date or return_date < depart_date):
         await callback.answer("Некорректная дата возвращения", show_alert=True)
         return
@@ -551,9 +557,16 @@ async def cb_add_subscription(callback: CallbackQuery):
         if depart_date:
             message += f" ({depart_date.strftime('%d.%m')})"
         await callback.answer(message)
+        if callback.message and callback.message.chat.type == "private":
+            await _show_subscriptions_list(callback.message, callback.from_user.id, edit=False)
+        else:
+            try:
+                await _send_subscriptions(callback.bot, callback.from_user.id)
+            except Exception:
+                logger.info("Subscription created; user must start private chat to receive messages")
         return
 
-    await callback.answer("Такая подписка уже есть")
+    await callback.answer("Такая подписка уже есть. Настройки — в разделе «Оповещения».")
 
 
 @router.callback_query(F.data.startswith("unsub:"))
@@ -1033,7 +1046,6 @@ async def alert_destination(message: Message, state: FSMContext):
     await state.update_data(alert_destination=destination)
     await state.set_state(NewAlertStates.departure)
     markup = calendar_keyboard("alertdep")
-    markup.inline_keyboard.insert(-1, [InlineKeyboardButton(text="Любая дата · 30 дней", callback_data="alertnew:anydate")])
     await message.answer("Выберите дату вылета или ближайшие 30 дней.", reply_markup=markup)
 
 
@@ -1064,7 +1076,6 @@ async def alert_departure(callback: CallbackQuery, state: FSMContext):
     await state.update_data(alert_departure=selected.isoformat())
     await state.set_state(NewAlertStates.return_day)
     markup = calendar_keyboard("alertret", selected.year, selected.month)
-    markup.inline_keyboard.insert(-1, [InlineKeyboardButton(text="В одну сторону", callback_data="alertnew:oneway")])
     await callback.message.answer("Выберите дату возвращения или билет в одну сторону.", reply_markup=markup)
 
 
@@ -1198,3 +1209,33 @@ async def alert_test_delivery(callback: CallbackQuery):
         await callback.answer("Не удалось доставить тестовое сообщение", show_alert=True)
         return
     await callback.answer("Тест отправлен")
+
+
+@router.callback_query(F.data.regexp(r"^alertcheck:[0-9]+$"))
+async def alert_check_now(callback: CallbackQuery):
+    from bot.services.scheduler import check_subscription
+    if not callback.message or callback.message.chat.type != "private":
+        await callback.answer("Откройте личный чат с ботом", show_alert=True)
+        return
+    await callback.answer("Проверяю цену…")
+    try:
+        status = await check_subscription(callback.bot, int(callback.data.split(":")[1]), callback.from_user.id, manual=True)
+    except Exception:
+        logger.exception("Manual subscription check failed")
+        status = "error"
+    messages = {
+        "ok": "✅ Цена проверена.",
+        "recent": "Цена уже проверена менее минуты назад.",
+        "paused": "Оповещение на паузе. Сначала возобновите слежение.",
+        "no_data": "В кэше Aviasales нет цены по заданным условиям. Прежняя цена сохранена.",
+        "busy": "Уже выполняется проверка. Попробуйте чуть позже.",
+        "delivery_failed": "Цена получена, но отправить оповещение не удалось. Проверка повторится.",
+        "settings_changed": "Настройки изменились во время проверки. Запустите проверку снова.",
+        "missing": "Оповещение не найдено.",
+        "expired": "Дата вылета прошла. Слежение завершено.",
+        "error": "Источник цен временно недоступен. Прежняя цена сохранена.",
+    }
+    await callback.message.answer(messages.get(status, "Проверка не завершена."))
+    if not await _show_subscription_card(callback.message, callback.from_user.id,
+            int(callback.data.split(":")[1]), edit=True):
+        await _show_subscriptions_list(callback.message, callback.from_user.id, edit=True)

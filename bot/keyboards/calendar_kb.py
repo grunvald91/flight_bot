@@ -76,5 +76,10 @@ def calendar_keyboard(
         rows.append([
             InlineKeyboardButton(text="Без даты — самые дешёвые", callback_data="search:nodate")
         ])
-    rows.append([InlineKeyboardButton(text="Отмена", callback_data=f"calcancel:{purpose}")])
+    if purpose == "alertdep":
+        rows.append([InlineKeyboardButton(text="Любая дата · 30 дней", callback_data="alertnew:anydate")])
+    elif purpose == "alertret":
+        rows.append([InlineKeyboardButton(text="В одну сторону", callback_data="alertnew:oneway")])
+    cancel = "sublist:open" if purpose in ("alertdep", "alertret") else f"calcancel:{purpose}"
+    rows.append([InlineKeyboardButton(text="Отмена", callback_data=cancel)])
     return InlineKeyboardMarkup(inline_keyboard=rows)

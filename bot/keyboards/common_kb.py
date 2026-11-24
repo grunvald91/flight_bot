@@ -108,6 +108,7 @@ def subscription_keyboard(
     buttons.extend([
         [InlineKeyboardButton(text=notif_text, callback_data=f"subact:notif:{sub_id}")],
         [InlineKeyboardButton(text=pause_text, callback_data=f"subact:pause:{sub_id}")],
+        [InlineKeyboardButton(text="🔄 Проверить сейчас", callback_data=f"alertcheck:{sub_id}")],
         [InlineKeyboardButton(text="🎯 Целевая цена", callback_data=f"alertlimit:{sub_id}")],
         [InlineKeyboardButton(text="✏️ Мин. снижение цены", callback_data=f"subact:mindrop:{sub_id}")],
         [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"subact:delask:{sub_id}")],

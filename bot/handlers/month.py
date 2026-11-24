@@ -284,6 +284,8 @@ def _keyboard(origin: str, destination: str, direct_only: bool, page: int, pages
             ))
         rows.append(nav)
 
+    if not _is_country(destination):
+        rows.append([InlineKeyboardButton(text="🔔 Следить за ценой · 30 дней", callback_data=f"sub:{origin}:{destination}::")])
     rows.append([InlineKeyboardButton(text="🔎 Другое направление", callback_data="menu:month")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
