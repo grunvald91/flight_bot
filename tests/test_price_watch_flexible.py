@@ -43,3 +43,15 @@ async def test_window_crosses_month(monkeypatch):
     rows = await scheduler._subscription_tickets(sub(), date(2026,11,24), False)
     assert {row["price"] for row in rows} == {200}
     assert [c.kwargs["depart_date"] for c in mock.call_args_list] == ["2026-11", "2026-12"]
+
+
+def test_foreign_cheapest_exact_roundtrip():
+    from bot.services.flexible_trips import cheapest_foreign
+    rows = [
+        {"destination":"LED","price":1,"departure_at":"2026-12-01","return_at":"2026-12-06"},
+        {"destination":"IST","price":2,"departure_at":"2026-12-01","return_at":"2026-12-07"},
+        {"destination":"EVN","price":300,"departure_at":"2026-12-01","return_at":"2026-12-06"},
+        {"destination":"IST","price":200,"departure_at":"2026-12-01","return_at":"2026-12-06"},
+    ]
+    countries = {"LED":"RU","IST":"TR","EVN":"AM"}
+    assert cheapest_foreign(rows,"RU","2026-12-01","2026-12-06",countries.get)["price"] == 200
