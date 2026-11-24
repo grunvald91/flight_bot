@@ -7,6 +7,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot.services import smart_alerts as service
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from bot.config import TIMEZONE
 from bot.services.city_resolver import city_resolver
 from bot.services.aviasales_api import aviasales_api
 from bot.utils.formatters import format_price
@@ -167,9 +170,10 @@ async def show_card(message,rule):
     if rule.last_checked_at:
         text += f"Проверка: {rule.last_checked_at.strftime('%d.%m %H:%M')} UTC\n"
     rows = []
-    if rule.last_offer:
+    if rule.last_offer and rule.last_offer["departure"] >= datetime.now(ZoneInfo(TIMEZONE)).date().isoformat():
         offer = rule.last_offer
         text += f"Последняя найденная цена: <b>{format_price(offer['price'])}</b> · {city(offer['destination'])}\n"
+        text += f"{offer['departure']}" + (f" — {offer['returning']}" if offer["returning"] else "") + "\n"
         url = aviasales_api.build_search_link(rule.origin, offer["destination"], offer["departure"], offer["returning"])
         rows.append([InlineKeyboardButton(text="Проверить билеты",url=url)])
     text += "Цена ориентировочная, без проживания."
