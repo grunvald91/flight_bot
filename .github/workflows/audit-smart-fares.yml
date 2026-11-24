@@ -20,7 +20,7 @@ jobs:
           script: |
             set -e
             cd /opt/flight_bot
-            python3 - <<'PY'
+            venv/bin/python - <<'PY'
             import datetime, json, os, re, subprocess, urllib.parse, urllib.request, urllib.error
             from zoneinfo import ZoneInfo
             pid = subprocess.check_output(["systemctl","show","-p","MainPID","--value","flight-bot"],text=True).strip()
@@ -28,7 +28,13 @@ jobs:
                 env = dict(item.split(b"=",1) for item in f.read().split(b"\0") if b"=" in item)
             token = env.get(b"TRAVELPAYOUTS_TOKEN",b"").decode()
             if not token:
-                raise SystemExit("Source token not present in service environment")
+                from dotenv import dotenv_values
+                token = dotenv_values("/opt/flight_bot/.env").get("TRAVELPAYOUTS_TOKEN") or ""
+            if not token:
+                from bot.config import TRAVELPAYOUTS_TOKEN
+                token = TRAVELPAYOUTS_TOKEN
+            if not token:
+                raise SystemExit("Source token unavailable to read-only test")
             today = datetime.datetime.now(ZoneInfo("Europe/Moscow")).date()
             found = False
             for offset in (3, 7, 14):
