@@ -719,6 +719,9 @@ async def process_manage_min_price_drop(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "menu:subscriptions")
 async def cb_subscriptions(callback: CallbackQuery, state: FSMContext):
+    if not callback.message or callback.message.chat.type != "private":
+        await callback.answer("Откройте личный чат с ботом", show_alert=True)
+        return
     await state.clear()
     await _show_subscriptions_list(callback.message, callback.from_user.id, page=0, edit=True)
     await callback.answer()
@@ -726,6 +729,9 @@ async def cb_subscriptions(callback: CallbackQuery, state: FSMContext):
 
 @router.message(Command("subscriptions"))
 async def cmd_subscriptions(message: Message, state: FSMContext):
+    if message.chat.type != "private":
+        await message.answer("Откройте личный чат с ботом, чтобы управлять оповещениями.")
+        return
     await state.clear()
     await _ensure_user(message.from_user)
     await _show_subscriptions_list(message, message.from_user.id, page=0, edit=False)
@@ -920,7 +926,12 @@ async def cb_subact_mindropset(callback: CallbackQuery):
         await callback.answer("Ошибка значения", show_alert=True)
         return
 
-    await update_subscription_min_drop(sub_id, callback.from_user.id, value)
+    if not 100 <= value <= 200000:
+        await callback.answer("Сумма вне допустимого диапазона", show_alert=True)
+        return
+    if not await update_subscription_min_drop(sub_id, callback.from_user.id, value):
+        await callback.answer("Оповещение не найдено", show_alert=True)
+        return
     await _show_subscription_card(callback.message, callback.from_user.id, sub_id, edit=True)
     await callback.answer(f"Обновлено: {format_price(value)}")
 

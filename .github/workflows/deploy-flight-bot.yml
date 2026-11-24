@@ -11,6 +11,14 @@ on:
       - "bot/handlers/month.py"
       - "bot/services/aviasales_api.py"
       - "bot/services/scheduler.py"
+      - "bot/handlers/subscriptions.py"
+      - "bot/services/notifications.py"
+      - "bot/keyboards/calendar_kb.py"
+      - "database/crud.py"
+      - "tests/test_price_watch_flexible.py"
+      - "tests/test_management_buttons.py"
+      - "bot/keyboards/common_kb.py"
+      - "tests/test_aviasales_api.py"
       - "bot/services/channel_publisher.py"
       - "bot/config.py"
       - "tests/test_channel_publisher.py"
@@ -29,7 +37,7 @@ concurrency:
 env:
   # Единый список файлов: по нему делается резервная копия, загрузка и откат.
   # Правила въезда (entry.py, entry_rules.py) вручную сверяются с источниками, см. VERIFIED_COUNTRY_RULES (21 страна); поиск по стране вместо города, названия стран
-  DEPLOY_FILES: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/handlers/common.py,bot/handlers/travel.py,bot/handlers/entry.py,bot/handlers/browse.py,bot/handlers/discover.py,bot/handlers/month.py,bot/keyboards/common_kb.py,bot/states/search.py,bot/services/scheduler.py,bot/services/channel_publisher.py,bot/services/tutu_mcp.py,bot/services/entry_rules.py,bot/services/fast_browse.py,bot/services/discovery_archive.py,bot/services/aviasales_api.py,bot/services/search_prefs.py,bot/services/countries.py,bot/services/country_search.py,bot/widgets/__init__.py,bot/widgets/browse.py,bot/widgets/browse.html,bot/widgets/offers.py,bot/widgets/offers.html,bot/widgets/month.py,bot/widgets/month.html,database/crud.py,database/database.py,database/models.py,data/kdmid_entry_rules.csv"
+  DEPLOY_FILES: "bot/config.py,bot/main.py,bot/handlers/admin.py,bot/handlers/common.py,bot/handlers/subscriptions.py,bot/handlers/travel.py,bot/handlers/entry.py,bot/handlers/browse.py,bot/handlers/discover.py,bot/handlers/month.py,bot/keyboards/common_kb.py,bot/keyboards/calendar_kb.py,bot/states/search.py,bot/services/scheduler.py,bot/services/notifications.py,bot/services/channel_publisher.py,bot/services/tutu_mcp.py,bot/services/entry_rules.py,bot/services/fast_browse.py,bot/services/discovery_archive.py,bot/services/aviasales_api.py,bot/services/search_prefs.py,bot/services/countries.py,bot/services/country_search.py,bot/widgets/__init__.py,bot/widgets/browse.py,bot/widgets/browse.html,bot/widgets/offers.py,bot/widgets/offers.html,bot/widgets/month.py,bot/widgets/month.html,database/crud.py,database/database.py,database/models.py,data/kdmid_entry_rules.csv"
 
 jobs:
   test:
@@ -52,7 +60,7 @@ jobs:
           ADMIN_IDS: ""
         run: |
           python -m compileall -q bot database tests
-          pytest -q tests/test_channel_publisher.py
+          pytest -q tests/test_channel_publisher.py tests/test_price_watch_flexible.py tests/test_management_buttons.py tests/test_aviasales_api.py
 
   deploy:
     needs: test

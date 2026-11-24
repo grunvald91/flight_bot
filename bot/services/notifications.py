@@ -2,11 +2,11 @@ import logging
 import html
 
 from aiogram import Bot
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from bot.services.city_resolver import city_resolver
 from bot.services.aviasales_api import aviasales_api
 from bot.utils.formatters import format_price, format_date_full, format_transfers
-from bot.keyboards.common_kb import ticket_keyboard
 from database.models import PriceSubscription
 
 logger = logging.getLogger(__name__)
@@ -66,12 +66,11 @@ async def notify_price_drop(bot: Bot, telegram_id: int, sub: PriceSubscription,
             text=text,
             parse_mode="HTML",
             disable_web_page_preview=True,
-            reply_markup=ticket_keyboard(
-                search_link, sub.origin, sub.destination,
-                f"{sub.origin}-{sub.destination}",
-                depart_date=departure or None,
-                return_date=sub.return_date.strftime("%Y-%m-%d") if sub.return_date else None,
-            ),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Купить на Aviasales", url=search_link)],
+                [InlineKeyboardButton(text="⚙️ Настроить оповещение", callback_data=f"subcard:{sub.id}")],
+                [InlineKeyboardButton(text="🔔 Все оповещения", callback_data="sublist:open")],
+            ]),
         )
         logger.info("Price drop notification sent to %d: %s-%s", telegram_id, sub.origin, sub.destination)
         return True

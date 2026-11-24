@@ -144,3 +144,12 @@ async def test_cheapest_30_day_window_has_no_extra_day_or_fake_nonstop(api):
     }
     assert [row["transfers"] for row in results] == [None, 1]
     assert sorted(set(calls)) == ["2026-11", "2026-12"]
+
+
+def test_strict_price_request_rejects_invalid_source(api):
+    async def invalid(*args, **kwargs):
+        return {"success": False}
+    api._cached_request = invalid
+    with pytest.raises(RuntimeError):
+        asyncio.run(api.search_prices_for_dates("MOW","IST",strict=True))
+    assert asyncio.run(api.search_prices_for_dates("MOW","IST")) == []
