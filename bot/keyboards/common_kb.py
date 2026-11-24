@@ -108,6 +108,7 @@ def subscription_keyboard(
     buttons.extend([
         [InlineKeyboardButton(text=notif_text, callback_data=f"subact:notif:{sub_id}")],
         [InlineKeyboardButton(text=pause_text, callback_data=f"subact:pause:{sub_id}")],
+        [InlineKeyboardButton(text="🎯 Целевая цена", callback_data=f"alertlimit:{sub_id}")],
         [InlineKeyboardButton(text="✏️ Мин. снижение цены", callback_data=f"subact:mindrop:{sub_id}")],
         [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"subact:delask:{sub_id}")],
         [InlineKeyboardButton(text="⬅️ К списку", callback_data="sublist:open")],
@@ -145,6 +146,7 @@ def subscriptions_list_keyboard(
     if nav:
         rows.append(nav)
 
+    rows.insert(0, [InlineKeyboardButton(text="➕ Новое оповещение", callback_data="alertnew:start")])
     rows.append([InlineKeyboardButton(text="⚙️ Общие настройки", callback_data="submgr:open")])
     rows.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:back")])
 
@@ -207,7 +209,7 @@ def main_menu_keyboard(user_id: int | None = None) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🌍 Подробный поиск", callback_data="menu:discover")],
         [InlineKeyboardButton(text="👤 Данные пассажира", callback_data="profile:open")],
         [InlineKeyboardButton(text="⭐ Избранные маршруты", callback_data="menu:favorites")],
-        [InlineKeyboardButton(text="🔔 Следить за ценой", callback_data="menu:subscriptions")],
+        [InlineKeyboardButton(text="🔔 Оповещения", callback_data="menu:subscriptions")],
         [
             InlineKeyboardButton(text="📜 История", callback_data="menu:history"),
             InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu:settings"),
@@ -232,7 +234,7 @@ def persistent_menu_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="🔍 Найти билеты"), KeyboardButton(text="🟣 Билеты через Туту")],
             [KeyboardButton(text="🧭 Поездка целиком"), KeyboardButton(text="⚡ Дешёвые за границу")],
             [KeyboardButton(text="🌍 Подробный поиск"), KeyboardButton(text="🏠 Меню")],
-            [KeyboardButton(text="📅 Дешёвые на месяц")],
+            [KeyboardButton(text="📅 Дешёвые на месяц"), KeyboardButton(text="🔔 Оповещения")],
         ],
         resize_keyboard=True,
         is_persistent=True,

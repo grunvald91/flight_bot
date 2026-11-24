@@ -33,7 +33,7 @@ WELCOME_TEXT = (
     "🧭 <b>Поездка целиком</b> — сравнить самолёт, поезд и автобус, подобрать отель "
     "и примерно посчитать стоимость всей поездки.\n\n"
     "🔍 <b>Найти билеты</b> — обычный поиск, если уже знаете нужный маршрут.\n\n"
-    "Ещё можно сохранить маршрут ⭐, следить за ценой 🔔 и посмотреть прошлые поиски 📜.\n\n"
+    "🔔 <b>Оповещения</b> — следите за ценой маршрута и получайте сообщения о снижении.\n\n"
     "Выберите, что хотите сделать 👇"
 )
 HELP_TEXT = (
@@ -131,7 +131,7 @@ async def persistent_favorites(message: Message, state: FSMContext):
     await _send_favorites(message.bot, message.from_user.id)
 
 
-@router.message(F.text == "🔔 Слежение")
+@router.message(F.text.in_(("🔔 Слежение", "🔔 Оповещения", "🔔 Следить за ценой")))
 async def persistent_subscriptions(message: Message, state: FSMContext):
     from bot.handlers.subscriptions import cmd_subscriptions
     await cmd_subscriptions(message, state)
@@ -248,7 +248,8 @@ async def cmd_guide(message: Message):
 
 
 @router.callback_query(F.data == "menu:back")
-async def cb_back_to_menu(callback: CallbackQuery):
+async def cb_back_to_menu(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
     bot_info = await callback.bot.get_me()
     text = WELCOME_TEXT.format(bot_username=bot_info.username)
     await callback.message.edit_text(

@@ -222,6 +222,24 @@ async def update_subscription_min_drop(sub_id: int, telegram_id: int, min_drop: 
         return result.rowcount > 0
 
 
+async def update_subscription_max_price(sub_id: int, telegram_id: int, max_price: int | None) -> bool:
+    if max_price is not None and not 100 <= max_price <= 10_000_000:
+        raise ValueError("Invalid target price")
+    async with async_session_maker() as session:
+        user = await _get_user(session, telegram_id)
+        if not user:
+            return False
+        result = await session.execute(
+            update(PriceSubscription).where(
+                PriceSubscription.id == sub_id,
+                PriceSubscription.user_id == user.id,
+                PriceSubscription.is_active == True,
+            ).values(max_price=max_price)
+        )
+        await session.commit()
+        return result.rowcount > 0
+
+
 async def pause_all_subscriptions(telegram_id: int, paused: bool) -> int:
     async with async_session_maker() as session:
         user = await _get_user(session, telegram_id)
