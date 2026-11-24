@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta, date
+import math
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
@@ -25,6 +26,9 @@ async def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         args=[bot],
         id="check_prices",
         replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=900,
     )
 
     scheduler.add_job(
@@ -95,107 +99,79 @@ async def retry_missed_channel_publications(bot: Bot) -> dict[str, int]:
     return await publish_tomorrow_channels(bot)
 
 
+async def _subscription_tickets(sub, today: date, direct: bool) -> list[dict]:
+    end = today + timedelta(days=30)
+    dates = ([sub.depart_date.isoformat()] if sub.depart_date else
+             sorted({(today + timedelta(days=i)).strftime("%Y-%m") for i in range(30)}))
+    return_day = sub.return_date.isoformat() if sub.return_date else None
+    result = []
+    for day in dates:
+        tickets = await aviasales_api.search_prices_for_dates(
+            origin=sub.origin, destination=sub.destination, depart_date=day,
+            return_date=return_day, one_way=not bool(return_day), direct=direct, limit=1000,
+        )
+        for ticket in tickets:
+            if not isinstance(ticket, dict):
+                continue
+            dep = str(ticket.get("departure_at") or ticket.get("depart_date") or "")[:10]
+            ret = str(ticket.get("return_at") or ticket.get("return_date") or "")[:10]
+            if sub.depart_date:
+                if dep != sub.depart_date.isoformat():
+                    continue
+            elif not today.isoformat() <= dep < end.isoformat():
+                continue
+            if return_day and ret != return_day:
+                continue
+            if not return_day and ret:
+                continue
+            if direct and (ticket.get("transfers", ticket.get("number_of_changes")) != 0
+                           or (return_day and ticket.get("return_transfers") != 0)):
+                continue
+            try:
+                raw = ticket.get("price", ticket.get("value"))
+                if isinstance(raw, bool):
+                    continue
+                price = float(raw)
+                if math.isfinite(price) and price > 0:
+                    result.append({**ticket, "price": math.ceil(price), "departure_at": dep})
+            except (TypeError, ValueError, OverflowError):
+                continue
+    return result
+
+
+def _should_notify(sub, current_price: int, threshold: int) -> bool:
+    previous = sub.last_price
+    drop = previous is not None and previous - current_price >= threshold
+    crossed = bool(sub.max_price and current_price <= sub.max_price
+                   and (previous is None or previous > sub.max_price))
+    return bool(drop or crossed)
+
+
 async def check_price_subscriptions(bot: Bot):
-    """Проверяет цены для всех активных подписок."""
     logger.info("Checking price subscriptions...")
-
     subs = await get_all_active_subscriptions()
-    if not subs:
-        return
-
-    today = date.today()
-
+    today = datetime.now(ZoneInfo(TIMEZONE)).date()
     for sub, telegram_id in subs:
         try:
-            # Автоматически деактивируем подписки с прошедшей датой
-            if sub.depart_date and sub.depart_date + timedelta(days=1) < today:
-                logger.info("Deactivating expired subscription %d (depart_date=%s)", sub.id, sub.depart_date)
+            if sub.depart_date and sub.depart_date < today:
                 await deactivate_subscription(sub.id)
                 continue
-
-            # Определяем даты для запроса
-            all_tickets = []
-
-            if sub.depart_date:
-                # Конкретная дата: запрашиваем ±1 день (3 дня)
-                for delta in [-1, 0, 1]:
-                    search_date = sub.depart_date + timedelta(days=delta)
-                    if search_date < today:
-                        continue
-                    date_str = search_date.strftime("%Y-%m-%d")
-                    tickets = await aviasales_api.search_prices_for_dates(
-                        origin=sub.origin,
-                        destination=sub.destination,
-                        depart_date=date_str,
-                    )
-                    all_tickets.extend(tickets)
-                    logger.debug("Sub %d: date %s -> %d tickets", sub.id, date_str, len(tickets))
-            else:
-                # Без даты: ближайшие 30 дней
-                end_date = today + timedelta(days=30)
-                end_str = end_date.strftime("%Y-%m-%d")
-                today_str = today.strftime("%Y-%m-%d")
-                tickets = await aviasales_api.search_prices_for_dates(
-                    origin=sub.origin,
-                    destination=sub.destination,
-                    depart_date=today_str,
-                )
-                # Фильтруем только ближайшие 30 дней
-                for t in tickets:
-                    dep_str = (t.get("departure_at") or t.get("depart_date", ""))[:10]
-                    if dep_str and dep_str <= end_str:
-                        all_tickets.append(t)
-                    elif not dep_str:
-                        all_tickets.append(t)
-                logger.debug("Sub %d: no date, 30-day window -> %d tickets", sub.id, len(all_tickets))
-
-            if not all_tickets:
+            settings = await get_user_settings(telegram_id)
+            direct = bool(settings and settings.direct_flights_only)
+            tickets = await _subscription_tickets(sub, today, direct)
+            if not tickets:
                 continue
-
-            # Получаем настройки пользователя для фильтрации
-            user_settings = await get_user_settings(telegram_id)
-
-            global_notifications = not (user_settings and user_settings.notifications_enabled is False)
-            sub_notifications = getattr(sub, "notify_enabled", True) is not False
-            notifications_enabled = global_notifications and sub_notifications
-
-            # Фильтрация по прямым рейсам если включена настройка
-            filtered_tickets = all_tickets
-            if user_settings and user_settings.direct_flights_only:
-                filtered_tickets = [t for t in all_tickets if t.get("transfers", 0) == 0]
-                logger.debug("Sub %d: filtered to direct flights only -> %d tickets", sub.id, len(filtered_tickets))
-
-                if not filtered_tickets:
-                    logger.debug("Sub %d: no direct flights found, skipping notification", sub.id)
+            cheapest = min(tickets, key=lambda t: t["price"])
+            current_price = cheapest["price"]
+            threshold = sub.min_price_drop or getattr(settings, "min_price_drop", None) or MIN_PRICE_DROP
+            enabled = (getattr(settings, "notifications_enabled", True) is not False
+                       and getattr(sub, "notify_enabled", True) is not False)
+            if enabled and _should_notify(sub, current_price, threshold):
+                if not await notify_price_drop(bot, telegram_id, sub, current_price, cheapest):
                     continue
-
-            cheapest = min(filtered_tickets, key=lambda t: t.get("price", float("inf")))
-            current_price = cheapest.get("price", 0)
-
-            if current_price <= 0:
-                continue
-
-            should_notify = False
-
-            if sub.last_price and current_price < sub.last_price:
-                drop = sub.last_price - current_price
-                threshold = sub.min_price_drop or MIN_PRICE_DROP
-                if drop >= threshold:
-                    should_notify = True
-
-            if sub.max_price and current_price <= sub.max_price:
-                should_notify = True
-
-            if should_notify and notifications_enabled:
-                await notify_price_drop(bot, telegram_id, sub, current_price, cheapest)
-            elif should_notify:
-                logger.debug("Sub %d: signal found but notifications are disabled", sub.id)
-
             await update_subscription_price(sub.id, current_price)
-
-        except Exception as e:
-            logger.error("Error checking subscription %d: %s", sub.id, e)
-
+        except Exception as exc:
+            logger.error("Error checking subscription %d: %s", sub.id, exc)
     logger.info("Price check complete: %d subscriptions", len(subs))
 
 
