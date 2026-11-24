@@ -117,6 +117,7 @@ class AviasalesAPI:
         depart_date: str,
         limit: int = 1000,
         direct: bool = False,
+        return_date: str | None = None,
     ) -> list[dict]:
         """All reported candidate destinations for an exact date, page by page.
 
@@ -130,12 +131,14 @@ class AviasalesAPI:
             "currency": "rub",
             "sorting": "price",
             "direct": "true" if direct else "false",
-            "one_way": "true",
+            "one_way": "false" if return_date else "true",
             "unique": "true",
             "limit": limit,
             "departure_at": depart_date,
             "token": self.token,
         }
+        if return_date:
+            params["return_at"] = return_date
         results = []
         previous_full_page = None
         seen_destinations = set()
@@ -143,6 +146,8 @@ class AviasalesAPI:
         while True:
             params["page"] = page
             cache_key = f"destinations:{origin}:{depart_date}:{limit}:{page}" + (":direct" if direct else "")
+            if return_date:
+                cache_key += f":return:{return_date}"
             data = await self._cached_request(
                 cache_key, "/aviasales/v3/prices_for_dates", params,
             )
