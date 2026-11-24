@@ -95,3 +95,32 @@ async def test_scheduler_registers_smart_hourly():
     job = sched.get_job("smart_travel_alerts")
     assert job is not None
     assert job.trigger.interval.total_seconds() == 3600
+
+
+@pytest.mark.asyncio
+async def test_db_persistence_and_owner_isolation(monkeypatch,tmp_path):
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from sqlalchemy import select
+    from database.models import Base, User, SmartTravelAlert
+    engine = create_async_engine("sqlite+aiosqlite:///" + str(tmp_path / "alerts.db"))
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(service,"async_session_maker",factory)
+    monkeypatch.setattr(service.city_resolver,"get_country_code",lambda _: "RU")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with factory() as session:
+            session.add_all([User(telegram_id=42),User(telegram_id=43)])
+            await session.commit()
+        assert await service.create_rule(42,"AER",5,30,15000,False) == "ok"
+        assert await service.create_rule(42,"AER",5,30,15000,False) == "duplicate"
+        rule, = await service.list_rules(42)
+        assert await service.list_rules(43) == []
+        assert await service.get_rule(43,rule.id) is None
+        assert not await service.change_rule(43,rule.id,remove=True)
+        assert await service.pause_all_rules(42,True) == 1
+        assert (await service.get_rule(42,rule.id)).paused
+        assert await service.change_rule(42,rule.id,remove=True)
+        assert await service.list_rules(42) == []
+    finally:
+        await engine.dispose()

@@ -81,6 +81,15 @@ async def change_rule(telegram_id, rule_id, *, paused=None, remove=False):
         return result.rowcount > 0
 
 
+async def pause_all_rules(telegram_id, paused):
+    async with async_session_maker() as session:
+        result = await session.execute(update(SmartTravelAlert).where(
+            SmartTravelAlert.telegram_id == telegram_id,
+            SmartTravelAlert.paused != paused).values(paused=paused))
+        await session.commit()
+        return int(result.rowcount or 0)
+
+
 def choose_fares(rows, country, departure, returning, country_for, direct):
     """Only exact dates, foreign destinations and positive finite RUB prices."""
     result = []
